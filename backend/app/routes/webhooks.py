@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from ..database import get_db
 from ..models import CallJob
@@ -7,36 +7,147 @@ from ..models import CallJob
 webhooks_bp = Blueprint("webhooks", __name__)
 
 
-def _extract_msg91_request_id(payload: dict):
-    return payload.get("msg91_request_id") or payload.get("request_id") or payload.get("id")
+def _extract_exotel_call_sid(payload: dict):
+    return payload.get("CallSid") or payload.get("callsid") or payload.get("Sid") or payload.get("sid")
 
 
-def _map_status(raw_status: str) -> str:
-    normalized_status = str(raw_status or "").strip().lower()
-    if normalized_status in {"connected", "completed", "success", "answered"}:
+def _map_exotel_status(payload: dict) -> str:
+    event_type = str(payload.get("EventType") or payload.get("event_type") or "").strip().lower()
+    raw_status = str(
+        payload.get("Status")
+        or payload.get("status")
+        or payload.get("CallStatus")
+        or payload.get("call_status")
+        or payload.get("DialCallStatus")
+        or payload.get("dial_call_status")
+        or ""
+    ).strip().lower()
+    if event_type == "answered":
         return "connected"
-    if normalized_status in {"failed", "busy", "no-answer", "no answer", "cancelled", "rejected"}:
+    if raw_status in {"completed", "answered", "in-progress", "in progress"}:
+        return "connected"
+    if raw_status in {"failed", "busy", "no-answer", "no answer", "canceled", "cancelled", "rejected"}:
         return "failed"
     return ""
 
 
-@webhooks_bp.post("/webhook/msg91")
-def msg91_webhook():
-    payload = request.get_json(silent=True) or request.form.to_dict() or {}
-    request_id = _extract_msg91_request_id(payload)
-    mapped_status = _map_status(
-        payload.get("status") or payload.get("call_status") or payload.get("event")
+def _normalize_phone_suffix(value: str) -> str:
+    digits_only = "".join(character for character in str(value or "") if character.isdigit())
+    return digits_only[-10:] if len(digits_only) >= 10 else digits_only
+
+
+def _resolve_audio_url_from_request() -> str:
+    explicit_audio_url = str(request.args.get("audio_url", "")).strip()
+    if explicit_audio_url:
+        return explicit_audio_url
+
+    call_sid = _extract_exotel_call_sid(request.args.to_dict())
+    job_id = str(request.args.get("job_id", "")).strip()
+    incoming_number_suffix = _normalize_phone_suffix(
+        request.args.get("CallFrom")
+        or request.args.get("From")
+        or request.args.get("contact_number")
+        or request.args.get("phone")
+        or ""
     )
-
-    if not request_id:
-        return jsonify({"status": "ignored", "message": "msg91_request_id not provided."}), 200
-
-    if not mapped_status:
-        return jsonify({"status": "ignored", "message": "No terminal call status found."}), 200
 
     db_session = get_db()
     try:
-        call_job = db_session.query(CallJob).filter(CallJob.msg91_request_id == request_id).first()
+        call_job = None
+        if call_sid:
+            call_job = db_session.query(CallJob).filter(CallJob.msg91_request_id == call_sid).first()
+        if call_job is None and job_id:
+            call_job = db_session.query(CallJob).filter(CallJob.id == job_id).first()
+        if call_job is None and incoming_number_suffix:
+            candidate_jobs = (
+                db_session.query(CallJob)
+                .filter(CallJob.status.in_(["calling", "connected", "pending"]))
+                .order_by(CallJob.updated_at.desc())
+                .all()
+            )
+            call_job = next(
+                (
+                    job
+                    for job in candidate_jobs
+                    if _normalize_phone_suffix(job.contact_number) == incoming_number_suffix and job.audio_url
+                ),
+                None,
+            )
+        if call_job is None:
+            call_job = (
+                db_session.query(CallJob)
+                .filter(CallJob.status.in_(["calling", "connected"]))
+                .filter(CallJob.audio_url.isnot(None))
+                .order_by(CallJob.updated_at.desc())
+                .first()
+            )
+        return str(call_job.audio_url).strip() if call_job and call_job.audio_url else ""
+    finally:
+        db_session.close()
+
+
+@webhooks_bp.get("/exotel/play-audio")
+def exotel_play_audio():
+    audio_url = _resolve_audio_url_from_request()
+    current_app.logger.info("Exotel requested play instructions with args=%s, resolved_audio_url=%s", request.args.to_dict(), audio_url)
+    if not audio_url:
+        return jsonify({"status": "error", "message": "Unable to resolve an audio URL for this Exotel request."}), 404
+
+    # Exotel fetches this XML when the callee answers, so the URL must stay publicly reachable.
+    response_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<Response>\n"
+        f"  <Play>{audio_url}</Play>\n"
+        "  <Hangup/>\n"
+        "</Response>"
+    )
+    response = Response(response_xml, status=200, mimetype="application/xml")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@webhooks_bp.get("/exotel/audio-url")
+@webhooks_bp.get("/exotel-audio-url")
+def exotel_audio_url():
+    audio_url = _resolve_audio_url_from_request()
+    current_app.logger.info("Exotel requested direct audio URL with args=%s, resolved_audio_url=%s", request.args.to_dict(), audio_url)
+    if not audio_url:
+        return jsonify({"status": "error", "message": "Unable to resolve an audio URL for this Exotel request."}), 404
+    response = Response(audio_url, status=200, mimetype="text/plain")
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@webhooks_bp.route("/webhook/exotel", methods=["GET", "POST"])
+def exotel_webhook():
+    payload = request.values.to_dict() or {}
+    json_payload = request.get_json(silent=True) or {}
+    payload.update(json_payload)
+    current_app.logger.info("Received Exotel webhook via %s with payload=%s", request.method, payload)
+
+    if request.method == "GET" and not payload:
+        # The current Exotel flow screenshot points the Greeting applet at this callback URL, so we provide
+        # a plain-text audio URL fallback here to avoid wasting another TTS generation while the dashboard is updated.
+        audio_url = _resolve_audio_url_from_request()
+        current_app.logger.info("Exotel webhook fallback resolved audio URL %s for an empty GET request.", audio_url)
+        if not audio_url:
+            return jsonify({"status": "error", "message": "Unable to resolve an audio URL for this Exotel request."}), 404
+        response = Response(audio_url, status=200, mimetype="text/plain")
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    call_sid = _extract_exotel_call_sid(payload)
+    mapped_status = _map_exotel_status(payload)
+
+    if not call_sid:
+        return jsonify({"status": "ignored", "message": "CallSid not provided."}), 200
+
+    if not mapped_status:
+        return jsonify({"status": "ignored", "message": "No supported Exotel status found."}), 200
+
+    db_session = get_db()
+    try:
+        call_job = db_session.query(CallJob).filter(CallJob.msg91_request_id == call_sid).first()
         if call_job is None:
             return jsonify({"status": "ignored", "message": "Matching call job not found."}), 200
 
@@ -44,8 +155,14 @@ def msg91_webhook():
         db_session.commit()
     except Exception:
         db_session.rollback()
-        return jsonify({"status": "error", "message": "Failed to update call status."}), 500
+        return jsonify({"status": "error", "message": "Failed to update Exotel call status."}), 500
     finally:
         db_session.close()
 
     return jsonify({"status": "ok"}), 200
+
+
+@webhooks_bp.post("/webhook/msg91")
+def msg91_webhook():
+    # This endpoint is kept as a stub so any old integrations fail softly after the Exotel migration.
+    return jsonify({"status": "deprecated", "message": "MSG91 webhook is no longer used. Use /webhook/exotel."}), 200

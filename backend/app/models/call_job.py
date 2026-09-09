@@ -21,6 +21,7 @@ class CallJob(Base):
     contact_number = Column(String(20), nullable=False)
     original_message = Column(Text, nullable=False)
     rephrased_message = Column(Text, nullable=True)
+    audio_url = Column(Text, nullable=True)
     scheduled_time = Column(DateTime(timezone=True), nullable=False)
     status = Column(String(20), nullable=False, default="pending")
     msg91_request_id = Column(String(255), nullable=True)
@@ -40,6 +41,7 @@ class CallJob(Base):
             "contact_number": self.contact_number,
             "original_message": self.original_message,
             "rephrased_message": self.rephrased_message,
+            "audio_url": self.audio_url,
             "scheduled_time": self.scheduled_time.isoformat(),
             "status": self.status,
             "msg91_request_id": self.msg91_request_id,

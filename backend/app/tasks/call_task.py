@@ -2,7 +2,7 @@ import logging
 
 from ..database import get_db
 from ..models import CallJob
-from ..services.msg91_service import place_call
+from ..services.exotel_service import place_call
 from ..services.tts_service import generate_audio
 
 
@@ -17,10 +17,16 @@ def execute_call(job_id: str) -> None:
             LOGGER.error("Call job %s was not found when the scheduler tried to execute it.", job_id)
             return
 
-        audio_url = generate_audio(call_job.rephrased_message or call_job.original_message)
-        msg91_request_id = place_call(call_job.contact_number, audio_url)
-        call_job.msg91_request_id = msg91_request_id
+        # Older rows may not have pre-generated audio yet, so we keep a compatibility fallback here.
+        audio_url = call_job.audio_url or generate_audio(call_job.rephrased_message or call_job.original_message)
+        if not call_job.audio_url and audio_url:
+            call_job.audio_url = audio_url
+        # Marking the row as calling before the API request helps audio lookup routes find the live job immediately.
         call_job.status = "calling"
+        db_session.commit()
+        exotel_call_sid = place_call(call_job.contact_number, audio_url)
+        # The existing column name stays for now so we do not disturb the current database schema.
+        call_job.msg91_request_id = exotel_call_sid
         db_session.commit()
     except Exception:
         db_session.rollback()

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoiceCaller AI Test Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">VoiceCaller AI</p>
+      <h1>Backend Test Console</h1>
+      <p class="lede">
+        Schedule a call, handle the missing-time flow, inspect saved jobs, and cancel pending calls
+        without needing the Android app.
+      </p>
+      <div class="status-strip">
+        <span class="pill" id="health-pill">Checking server...</span>
+        <span class="pill muted">Timezone: IST</span>
+        <span class="pill muted">Port: 5000</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="section-kicker">Schedule Call</p>
+          <h2>Create a test reminder</h2>
+        </div>
+        <button class="ghost-button" id="refresh-button" type="button">Refresh Calls</button>
+      </div>
+
+      <form id="schedule-form" class="grid-form">
+        <label>
+          <span>User ID</span>
+          <input type="text" name="user_id" value="user_001" required>
+        </label>
+        <label>
+          <span>User Name</span>
+          <input type="text" name="user_name" value="Priya" required>
+        </label>
+        <label>
+          <span>Contact Name</span>
+          <input type="text" name="contact_name" value="Rahul" required>
+        </label>
+        <label>
+          <span>Contact Number</span>
+          <input type="tel" name="contact_number" value="+919876543210" required>
+        </label>
+        <label class="wide">
+          <span>Message</span>
+          <textarea name="message" rows="4" required>Remind him about the meeting tomorrow at 6pm.</textarea>
+        </label>
+        <label class="wide">
+          <span>Chosen Time (optional if message already includes time)</span>
+          <input type="datetime-local" name="chosen_time">
+        </label>
+        <div class="wide action-row">
+          <button class="primary-button" type="submit">Schedule Test Call</button>
+          <button class="secondary-button" id="clear-time-button" type="button">Clear Chosen Time</button>
+        </div>
+      </form>
+
+      <div id="feedback-card" class="feedback-card hidden">
+        <p class="section-kicker">Latest Response</p>
+        <pre id="feedback-output"></pre>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="section-kicker">Queued Calls</p>
+          <h2>Upcoming and past jobs</h2>
+        </div>
+        <label class="inline-filter">
+          <span>Filter by User ID</span>
+          <input id="user-filter" type="text" value="user_001">
+        </label>
+      </div>
+
+      <div class="lists">
+        <div class="list-card">
+          <div class="list-header">
+            <h3>Upcoming</h3>
+            <span id="upcoming-count" class="count-badge">0</span>
+          </div>
+          <div id="upcoming-list" class="call-list empty-state">No upcoming calls yet.</div>
+        </div>
+
+        <div class="list-card">
+          <div class="list-header">
+            <h3>Past</h3>
+            <span id="past-count" class="count-badge">0</span>
+          </div>
+          <div id="past-list" class="call-list empty-state">No past calls yet.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <template id="call-card-template">
+    <article class="call-card">
+      <div class="card-topline">
+        <div>
+          <h4 class="contact-name"></h4>
+          <p class="meta-line"></p>
+        </div>
+        <span class="status-badge"></span>
+      </div>
+      <p class="message-line"></p>
+      <div class="card-actions"></div>
+    </article>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -38,6 +38,7 @@ def _call_jobs_column_definitions(dialect_name: str):
         "contact_number": "VARCHAR(20)",
         "original_message": "TEXT",
         "rephrased_message": "TEXT",
+        "audio_url": "TEXT",
         "scheduled_time": timestamp_type,
         "status": "VARCHAR(20) DEFAULT 'pending'",
         "msg91_request_id": "VARCHAR(255)",
