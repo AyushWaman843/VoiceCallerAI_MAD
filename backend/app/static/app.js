@@ -1,4 +1,5 @@
 const scheduleForm = document.getElementById("schedule-form");
+<<<<<<< HEAD
 const analyzeButton = document.getElementById("analyze-button");
 const continueButton = document.getElementById("continue-button");
 const addContactButton = document.getElementById("add-contact-button");
@@ -17,12 +18,20 @@ const refreshButton = document.getElementById("refresh-button");
 const healthPill = document.getElementById("health-pill");
 const feedbackOutput = document.getElementById("feedback-output");
 const debugPanel = document.getElementById("debug-panel");
+=======
+const clearTimeButton = document.getElementById("clear-time-button");
+const refreshButton = document.getElementById("refresh-button");
+const healthPill = document.getElementById("health-pill");
+const feedbackCard = document.getElementById("feedback-card");
+const feedbackOutput = document.getElementById("feedback-output");
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
 const userFilter = document.getElementById("user-filter");
 const upcomingList = document.getElementById("upcoming-list");
 const pastList = document.getElementById("past-list");
 const upcomingCount = document.getElementById("upcoming-count");
 const pastCount = document.getElementById("past-count");
 const callCardTemplate = document.getElementById("call-card-template");
+<<<<<<< HEAD
 const homeView = document.getElementById("home-view");
 const scheduledView = document.getElementById("scheduled-view");
 const settingsPanel = document.getElementById("settings-panel");
@@ -90,10 +99,17 @@ function updateGreeting() {
 
 
 function showFeedback(payload) {
+=======
+
+
+function showFeedback(payload) {
+  feedbackCard.classList.remove("hidden");
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
   feedbackOutput.textContent = JSON.stringify(payload, null, 2);
 }
 
 
+<<<<<<< HEAD
 function addContactRow(name = "", number = "") {
   const fragment = contactRowTemplate.content.cloneNode(true);
   const row = fragment.querySelector(".contact-row");
@@ -250,6 +266,15 @@ async function postScheduleCall(body) {
     throw new Error(payload.message || "The backend could not process this request.");
   }
   return payload;
+=======
+function toIsoStringFromLocalInput(localValue) {
+  if (!localValue) {
+    return "";
+  }
+
+  // Adding the IST offset here keeps the backend and browser aligned on the same intended time.
+  return `${localValue}:00+05:30`;
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
 }
 
 
@@ -257,21 +282,52 @@ async function checkHealth() {
   try {
     const response = await fetch("/health");
     const payload = await response.json();
+<<<<<<< HEAD
     healthPill.textContent = payload.status === "ok" ? "Backend ready" : "Backend issue";
     healthPill.classList.toggle("health-pill-live", payload.status === "ok");
   } catch (error) {
     healthPill.textContent = "Backend offline";
     healthPill.classList.remove("health-pill-live");
+=======
+    healthPill.textContent = payload.status === "ok" ? "Server healthy" : "Server responded with an issue";
+  } catch (error) {
+    healthPill.textContent = "Server unreachable";
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
   }
 }
 
 
+<<<<<<< HEAD
 function renderCallList(container, calls, showCancel) {
   if (!calls.length) {
     container.className = "call-list empty-state";
     container.textContent = showCancel ? "No upcoming calls yet." : "No call history yet.";
     return;
   }
+=======
+async function loadCalls() {
+  const userId = userFilter.value.trim();
+  if (!userId) {
+    return;
+  }
+
+  const response = await fetch(`/calls?user_id=${encodeURIComponent(userId)}`);
+  const payload = await response.json();
+  renderCallList(upcomingList, payload.upcoming || [], true);
+  renderCallList(pastList, payload.past || [], false);
+  upcomingCount.textContent = String((payload.upcoming || []).length);
+  pastCount.textContent = String((payload.past || []).length);
+}
+
+
+function renderCallList(container, calls, showCancel) {
+  if (!calls.length) {
+    container.className = "call-list empty-state";
+    container.textContent = showCancel ? "No upcoming calls yet." : "No past calls yet.";
+    return;
+  }
+
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
   container.className = "call-list";
   container.replaceChildren(...calls.map((call) => buildCallCard(call, showCancel)));
 }
@@ -280,7 +336,11 @@ function renderCallList(container, calls, showCancel) {
 function buildCallCard(call, showCancel) {
   const fragment = callCardTemplate.content.cloneNode(true);
   fragment.querySelector(".contact-name").textContent = call.contact_name;
+<<<<<<< HEAD
   fragment.querySelector(".meta-line").textContent = `${formatScheduledTime(call.scheduled_time)} / ${call.contact_number}`;
+=======
+  fragment.querySelector(".meta-line").textContent = `${call.contact_number} • ${new Date(call.scheduled_time).toLocaleString()}`;
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
   fragment.querySelector(".message-line").textContent = call.rephrased_message || call.original_message;
 
   const statusBadge = fragment.querySelector(".status-badge");
@@ -291,7 +351,11 @@ function buildCallCard(call, showCancel) {
   if (showCancel && call.status === "pending") {
     const button = document.createElement("button");
     button.type = "button";
+<<<<<<< HEAD
     button.className = "subtle-button danger-button";
+=======
+    button.className = "cancel-button";
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
     button.textContent = "Cancel";
     button.addEventListener("click", async () => {
       const response = await fetch(`/calls/${call.id}`, { method: "DELETE" });
@@ -301,10 +365,15 @@ function buildCallCard(call, showCancel) {
     });
     actions.appendChild(button);
   }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
   return fragment;
 }
 
 
+<<<<<<< HEAD
 async function loadCalls() {
   const userId = userFilter.value.trim();
   if (!userId) {
@@ -357,10 +426,44 @@ scheduleForm.addEventListener("submit", async (event) => {
     analyzeButton.textContent = "Try again";
   } finally {
     analyzeButton.disabled = false;
+=======
+scheduleForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const formData = new FormData(scheduleForm);
+  const body = {
+    user_id: String(formData.get("user_id") || "").trim(),
+    user_name: String(formData.get("user_name") || "").trim(),
+    contact_name: String(formData.get("contact_name") || "").trim(),
+    contact_number: String(formData.get("contact_number") || "").trim(),
+    message: String(formData.get("message") || "").trim(),
+  };
+
+  const chosenTime = toIsoStringFromLocalInput(String(formData.get("chosen_time") || "").trim());
+  if (chosenTime) {
+    body.chosen_time = chosenTime;
+  }
+
+  const response = await fetch("/schedule-call", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+  showFeedback(payload);
+
+  if (payload.status === "needs_time") {
+    scheduleForm.elements.chosen_time.focus();
+  } else {
+    await loadCalls();
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
   }
 });
 
 
+<<<<<<< HEAD
 confirmButton.addEventListener("click", async () => {
   if (!currentAgentResult) {
     return;
@@ -444,5 +547,16 @@ scheduleForm.elements.user_name.addEventListener("input", updateGreeting);
 
 addContactRow("Ayush Waman", "+918879279251");
 updateGreeting();
+=======
+clearTimeButton.addEventListener("click", () => {
+  scheduleForm.elements.chosen_time.value = "";
+});
+
+
+refreshButton.addEventListener("click", loadCalls);
+userFilter.addEventListener("change", loadCalls);
+
+
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
 checkHealth();
 loadCalls();

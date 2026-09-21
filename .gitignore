@@ -10,7 +10,10 @@ build/
 
 # Android
 android/.gradle/
+<<<<<<< HEAD
 android/.gradle-user-home/
+=======
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
 android/build/
 android/local.properties
 android/*.keystore

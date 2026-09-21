@@ -1,10 +1,16 @@
+<<<<<<< HEAD
 from urllib.parse import quote, unquote, urlparse
 
+=======
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from ..database import get_db
 from ..models import CallJob
+<<<<<<< HEAD
 from ..config import Config
+=======
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
 
 
 webhooks_bp = Blueprint("webhooks", __name__)
@@ -39,6 +45,7 @@ def _normalize_phone_suffix(value: str) -> str:
     return digits_only[-10:] if len(digits_only) >= 10 else digits_only
 
 
+<<<<<<< HEAD
 def _canonicalize_audio_url(audio_url: str) -> str:
     normalized_audio_url = str(audio_url or "").strip()
     if not normalized_audio_url:
@@ -64,6 +71,12 @@ def _resolve_audio_url_from_request() -> str:
     explicit_audio_url = str(request.args.get("audio_url", "")).strip()
     if explicit_audio_url:
         return _canonicalize_audio_url(explicit_audio_url)
+=======
+def _resolve_audio_url_from_request() -> str:
+    explicit_audio_url = str(request.args.get("audio_url", "")).strip()
+    if explicit_audio_url:
+        return explicit_audio_url
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
 
     call_sid = _extract_exotel_call_sid(request.args.to_dict())
     job_id = str(request.args.get("job_id", "")).strip()
@@ -105,7 +118,11 @@ def _resolve_audio_url_from_request() -> str:
                 .order_by(CallJob.updated_at.desc())
                 .first()
             )
+<<<<<<< HEAD
         return _canonicalize_audio_url(call_job.audio_url) if call_job and call_job.audio_url else ""
+=======
+        return str(call_job.audio_url).strip() if call_job and call_job.audio_url else ""
+>>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
     finally:
         db_session.close()
 
