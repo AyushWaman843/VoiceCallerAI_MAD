@@ -1,0 +1,34 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+
+# Android
+android/.gradle/
+android/.gradle-user-home/
+android/build/
+android/local.properties
+android/*.keystore
+
+# IDE
+.vscode/
+.idea/
+*.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Misc
+ngrok.exe
+ngrok
+backend/.venv/
+backend/__pycache__/
+backend/generated_audio/
+backend/migration_test.db
+voicecaller.db

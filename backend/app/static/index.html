@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CallAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="phone-frame">
+      <button class="corner-button" id="settings-toggle" type="button" aria-expanded="false" aria-controls="settings-panel">+</button>
+
+      <form id="schedule-form">
+        <section class="settings-panel hidden" id="settings-panel" aria-label="Testing setup">
+          <div class="settings-panel-head">
+            <div>
+              <p class="section-label">Testing setup</p>
+              <p class="settings-copy">Use this only for the web demo. The Android app can replace it with real profile and contacts later.</p>
+            </div>
+            <span class="health-pill" id="health-pill">Checking backend</span>
+          </div>
+
+          <div class="identity-row">
+            <label>
+              <span>User ID</span>
+              <input type="text" name="user_id" value="user_001" required>
+            </label>
+            <label>
+              <span>Your name</span>
+              <input type="text" name="user_name" value="Ayush" required>
+            </label>
+          </div>
+
+          <div class="contacts-panel">
+            <div class="contacts-panel-head">
+              <div>
+                <p class="section-label">Contacts</p>
+                <p class="settings-copy">These are the contacts the agent can match from your prompt.</p>
+              </div>
+              <button class="pill-button" id="add-contact-button" type="button">Add</button>
+            </div>
+            <div id="contacts-list" class="contacts-list"></div>
+          </div>
+        </section>
+
+        <section class="view-panel view-panel-active home-view" id="home-view" aria-labelledby="home-tab">
+          <div class="hero-card">
+            <p class="greeting-line" id="greeting-line">Good afternoon,</p>
+            <h1 class="greeting-name" id="greeting-name">Ayush</h1>
+            <p class="hero-subtitle">What would you like me to call?</p>
+          </div>
+
+          <section class="processing-card hidden" id="processing-card" aria-live="polite">
+            <div class="processing-waves">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <p class="processing-title">Thinking through your call</p>
+            <p class="processing-copy">Matching the contact, finding the right time, and preparing the spoken message.</p>
+          </section>
+
+          <section class="missing-card hidden" id="missing-section" aria-live="polite">
+            <p class="section-label">One more thing</p>
+            <h2>Fill only what is missing.</h2>
+            <div id="missing-fields" class="missing-fields"></div>
+            <button class="primary-button inline-action" id="continue-button" type="submit">Continue</button>
+          </section>
+
+          <section class="confirm-card hidden" id="confirmation-card" aria-live="polite">
+            <div class="confirm-header">
+              <div>
+                <p class="section-label">Here's what I understood</p>
+                <h2>Confirm this call</h2>
+              </div>
+            </div>
+
+            <dl class="confirm-grid">
+              <div>
+                <dt>Call</dt>
+                <dd id="confirm-contact"></dd>
+              </div>
+              <div>
+                <dt>When</dt>
+                <dd id="confirm-time"></dd>
+              </div>
+              <div class="confirm-message-row">
+                <dt>Say</dt>
+                <dd id="confirm-message"></dd>
+              </div>
+            </dl>
+
+            <div class="confirm-actions">
+              <button class="secondary-button" id="edit-button" type="button">Edit details</button>
+              <button class="primary-button" id="confirm-button" type="button">Schedule call</button>
+            </div>
+          </section>
+
+          <div class="composer-card">
+            <label class="composer-field" for="prompt-input">
+              <span class="sr-only">Prompt</span>
+              <textarea id="prompt-input" name="raw_prompt" rows="3" placeholder="Tell me who to call and what to say..." required></textarea>
+            </label>
+            <div class="composer-tools">
+              <button class="tool-button" type="button" aria-label="Voice mode placeholder">
+                <span class="sr-only">Voice mode placeholder</span>
+              </button>
+              <button class="send-button" id="analyze-button" type="submit" aria-label="Send prompt">
+                <span class="sr-only">Send prompt</span>
+              </button>
+            </div>
+          </div>
+
+          <p class="helper-quote">Try: "Call John tomorrow at 4 PM and tell him he sucks."</p>
+
+          <div class="quick-actions" aria-label="Quick actions">
+            <button class="quick-pill suggestion-chip" type="button" data-prompt="Call Ayush and tell him he owes me 50 rupees tomorrow at 3pm">Call someone</button>
+            <button class="quick-pill suggestion-chip" type="button" data-prompt="Call Rahul after 2 hours and ask him about the project update">Schedule a call</button>
+            <button class="quick-pill suggestion-chip" type="button" data-prompt="Call 8879279251 tomorrow at 9am and tell him the meeting is confirmed">Follow up with...</button>
+          </div>
+
+          <details class="debug-panel" id="debug-panel">
+            <summary>Agent response</summary>
+            <pre id="feedback-output"></pre>
+          </details>
+        </section>
+
+        <section class="view-panel scheduled-view" id="scheduled-view" aria-labelledby="scheduled-tab">
+          <div class="scheduled-header">
+            <div>
+              <p class="section-label">CallAI</p>
+              <h2>Scheduled</h2>
+              <p class="scheduled-copy">Your upcoming automated conversations.</p>
+            </div>
+            <button class="pill-button" id="refresh-button" type="button">Refresh</button>
+          </div>
+
+          <label class="filter-field">
+            <span>User ID</span>
+            <input id="user-filter" type="text" value="user_001">
+          </label>
+
+          <section class="call-group">
+            <div class="call-group-heading">
+              <h3>Upcoming</h3>
+              <span class="count-badge" id="upcoming-count">0</span>
+            </div>
+            <div id="upcoming-list" class="call-list empty-state">No upcoming calls yet.</div>
+          </section>
+
+          <section class="call-group">
+            <div class="call-group-heading">
+              <h3>History</h3>
+              <span class="count-badge muted-count" id="past-count">0</span>
+            </div>
+            <div id="past-list" class="call-list empty-state">No past calls yet.</div>
+          </section>
+        </section>
+      </form>
+
+      <nav class="bottom-nav" aria-label="Bottom navigation">
+        <button class="nav-item active" id="home-tab" type="button" data-view="home">
+          <span class="nav-icon home-icon"></span>
+          <span>Home</span>
+        </button>
+        <button class="nav-item" id="scheduled-tab" type="button" data-view="scheduled">
+          <span class="nav-icon calendar-icon"></span>
+          <span>Scheduled</span>
+        </button>
+        <button class="nav-item" id="contacts-tab" type="button" data-view="contacts">
+          <span class="nav-icon contacts-icon"></span>
+          <span>Contacts</span>
+        </button>
+      </nav>
+    </section>
+  </main>
+
+  <template id="contact-row-template">
+    <div class="contact-row">
+      <input class="contact-row-name" type="text" aria-label="Contact name" placeholder="Ayush Waman">
+      <input class="contact-row-number" type="tel" aria-label="Contact number" placeholder="+918879279251">
+      <button class="remove-contact-button" type="button" aria-label="Remove contact">Remove</button>
+    </div>
+  </template>
+
+  <template id="call-card-template">
+    <article class="call-card">
+      <div class="call-card-top">
+        <div>
+          <p class="call-card-label">Scheduled</p>
+          <h4 class="contact-name"></h4>
+        </div>
+        <span class="status-badge"></span>
+      </div>
+      <p class="meta-line"></p>
+      <p class="message-line"></p>
+      <div class="card-actions"></div>
+    </article>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
