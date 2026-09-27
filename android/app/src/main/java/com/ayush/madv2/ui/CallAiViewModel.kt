@@ -74,6 +74,7 @@ data class ScheduledCallUiModel(
     val message: String,
     val status: String,
     val canCancel: Boolean,
+    val scheduledTime: String = "",
 )
 
 data class CallAiUiState(
@@ -515,6 +516,7 @@ class CallAiViewModel(
             message = job.rephrasedMessage ?: job.originalMessage,
             status = job.status.replaceFirstChar { it.uppercase() },
             canCancel = job.status == "pending",
+            scheduledTime = job.scheduledTime,
         )
     }
 

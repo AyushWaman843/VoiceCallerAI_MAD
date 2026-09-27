@@ -1056,7 +1056,7 @@ private fun SettingsCard(
 }
 
 @Composable
-private fun ScheduledTab(
+internal fun ScheduledTab(
     uiState: CallAiUiState,
     onRefreshCalls: () -> Unit,
     onCancelCall: (String) -> Unit,
@@ -1072,7 +1072,7 @@ private fun ScheduledTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "CallAI",
                     color = AppAccent,
@@ -1092,7 +1092,7 @@ private fun ScheduledTab(
                     color = AppText,
                 )
                 Text(
-                    text = "Your upcoming automated conversations.",
+                    text = "Your calls, one day at a time.",
                     modifier = Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 15.sp,
@@ -1113,44 +1113,14 @@ private fun ScheduledTab(
             }
         }
 
-        LazyColumn(
+        CallCalendar(
+            uiState = uiState,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            item {
-                SectionHeader(title = "Upcoming", count = uiState.upcomingCalls.size)
-            }
-
-            if (uiState.upcomingCalls.isEmpty()) {
-                item {
-                    EmptyCard(text = "No upcoming calls yet.")
-                }
-            }
-
-            items(uiState.upcomingCalls) { call ->
-                ScheduledCallItem(call = call, onCancelCall = onCancelCall)
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-                SectionHeader(title = "History", count = uiState.historyCalls.size, muted = true)
-            }
-
-            if (uiState.historyCalls.isEmpty()) {
-                item {
-                    EmptyCard(text = "No past calls yet.")
-                }
-            }
-
-            items(uiState.historyCalls) { call ->
-                ScheduledCallItem(call = call, onCancelCall = onCancelCall)
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(110.dp))
-            }
+                .weight(1f)
+                .padding(top = 20.dp),
+        ) { call ->
+            ScheduledCallItem(call = call, onCancelCall = onCancelCall)
         }
     }
 }
