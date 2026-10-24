@@ -1,5 +1,6 @@
 package com.ayush.madv2.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -223,6 +226,8 @@ private fun MonthGrid(
     onToday: () -> Unit,
     onSelectDay: (LocalDate) -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
+    val tick = { haptic.performHapticFeedback(HapticFeedbackType.SegmentTick) }
     Surface(color = AppPanel, shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -233,10 +238,10 @@ private fun MonthGrid(
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp,
                 )
-                IconButton(onClick = onPrevious, modifier = Modifier.semantics { contentDescription = "Previous month" }) {
+                IconButton(onClick = { tick(); onPrevious() }, modifier = Modifier.semantics { contentDescription = "Previous month" }) {
                     Text("\u2039", color = AppText, fontSize = 28.sp)
                 }
-                IconButton(onClick = onNext, modifier = Modifier.semantics { contentDescription = "Next month" }) {
+                IconButton(onClick = { tick(); onNext() }, modifier = Modifier.semantics { contentDescription = "Next month" }) {
                     Text("\u203a", color = AppText, fontSize = 28.sp)
                 }
             }
@@ -265,14 +270,14 @@ private fun MonthGrid(
                                 calls = byDate[date].orEmpty(),
                                 minHeight = rowHeight,
                                 modifier = Modifier.weight(1f),
-                                onClick = { onSelectDay(date) },
+                                onClick = { tick(); onSelectDay(date) },
                             )
                         }
                     }
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onToday) { Text("Today", color = AppText) }
+                TextButton(onClick = { tick(); onToday() }) { Text("Today", color = AppText) }
             }
         }
     }
@@ -288,6 +293,14 @@ private fun CalendarDay(
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
+    val fill by animateColorAsState(
+        if (isSelected) AppAccent else if (calls.isNotEmpty()) AppPanelAlt else AppPanelAlt.copy(alpha = 0f),
+        label = "day-fill",
+    )
+    val number by animateColorAsState(
+        if (isSelected) AppOnAccent else if (isToday) AppAccent else AppText,
+        label = "day-number",
+    )
     Surface(
         onClick = onClick,
         modifier = modifier.semantics {
@@ -295,28 +308,33 @@ private fun CalendarDay(
             contentDescription = "${date.format(DayTitle)} ${date.year}${if (isToday) ", today" else ""}, " +
                 "${calls.size} calls${if (calls.isEmpty()) "" else ": " + calls.joinToString { it.call.contactName }}"
         },
-        color = if (isSelected) AppAccentSoft else Color.Transparent,
-        shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, if (isSelected || isToday) AppAccent else AppLine),
+        color = fill,
+        shape = RoundedCornerShape(14.dp),
+        border = if (isToday && !isSelected) BorderStroke(1.5.dp, AppAccent) else null,
     ) {
         Column(
             Modifier.heightIn(min = minHeight).padding(horizontal = 2.dp, vertical = 6.dp).clearAndSetSemantics {},
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            Text(date.dayOfMonth.toString(), color = AppText, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            Text(
+                date.dayOfMonth.toString(),
+                color = number,
+                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Medium,
+                fontSize = 14.sp,
+            )
             calls.take(2).forEach { entry ->
                 val cancelled = entry.call.status.equals("cancelled", ignoreCase = true)
                 val failed = entry.call.status.equals("failed", ignoreCase = true)
                 Surface(
-                    color = if (failed) AppDangerSoft else if (cancelled) AppPanelAlt else AppAccentSoft,
-                    shape = RoundedCornerShape(4.dp),
+                    color = if (isSelected) AppOnAccent.copy(alpha = 0.22f) else if (failed) AppDangerSoft else if (cancelled) AppLine else AppAccentSoft,
+                    shape = RoundedCornerShape(6.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
                         entry.call.contactName,
-                        modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
-                        color = AppText,
+                        modifier = Modifier.padding(horizontal = 3.dp, vertical = 2.dp),
+                        color = if (isSelected) AppOnAccent else AppText,
                         fontSize = 10.sp,
                         lineHeight = 12.sp,
                         maxLines = 1,
@@ -324,8 +342,8 @@ private fun CalendarDay(
                     )
                 }
             }
-            if (calls.size > 2) Text("+${calls.size - 2}", color = AppText, fontSize = 10.sp, lineHeight = 12.sp)
-            if (isToday && calls.isEmpty()) Box(Modifier.size(4.dp).background(AppAccent, CircleShape))
+            if (calls.size > 2) Text("+${calls.size - 2}", color = if (isSelected) AppOnAccent else AppText, fontSize = 10.sp, lineHeight = 12.sp)
+            if (isToday && calls.isEmpty() && !isSelected) Box(Modifier.size(4.dp).background(AppAccent, CircleShape))
         }
     }
 }
