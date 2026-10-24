@@ -267,25 +267,6 @@ def schedule_call():
             ),
             500,
         )
->>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
-
-    try:
-        # Pre-generating audio at scheduling time makes the later Exotel call much more reliable.
-        audio_url = generate_audio(message_preview)
-    except Exception:
-        current_app.logger.exception("Failed to generate hosted audio during schedule-call.")
-        return jsonify({"status": "error", "message": "Unable to generate the call audio right now."}), 502
-
-    if not _is_public_url(audio_url):
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": "Audio was generated locally, but PUBLIC_BASE_URL is not configured for a public hosted file URL.",
-                }
-            ),
-            500,
-        )
 
     db_session = get_db()
     try:

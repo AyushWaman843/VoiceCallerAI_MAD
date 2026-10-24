@@ -4,25 +4,41 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.MediaRecorder
+import android.os.Build
 import android.provider.ContactsContract
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,27 +67,51 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -79,6 +119,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ayush.madv2.R
+import com.ayush.madv2.ui.theme.AccentChoice
 import com.ayush.madv2.ui.theme.AppAccent
 import com.ayush.madv2.ui.theme.AppAccentSoft
 import com.ayush.madv2.ui.theme.AppBackground
@@ -86,16 +127,21 @@ import com.ayush.madv2.ui.theme.AppDanger
 import com.ayush.madv2.ui.theme.AppDangerSoft
 import com.ayush.madv2.ui.theme.AppLine
 import com.ayush.madv2.ui.theme.AppMuted
+import com.ayush.madv2.ui.theme.AppOnAccent
 import com.ayush.madv2.ui.theme.AppPanel
 import com.ayush.madv2.ui.theme.AppPanelAlt
 import com.ayush.madv2.ui.theme.AppText
+import com.ayush.madv2.ui.theme.AppTheme
 import com.ayush.madv2.ui.theme.MADv2Theme
+import com.ayush.madv2.ui.theme.ThemeMode
 import java.io.File
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.ZoneId
+import kotlin.math.abs
 import kotlin.math.sin
+import kotlinx.coroutines.delay
 
 enum class AppTab {
     Home,
@@ -118,15 +164,15 @@ fun CallAiApp(
     val quickActions = remember {
         listOf(
             QuickAction(
-                title = "Call someone",
+                title = "Payment reminder",
                 prompt = "Call Ayush and tell him he owes me 50 rupees tomorrow at 3pm",
             ),
             QuickAction(
-                title = "Schedule a call",
+                title = "Project check-in",
                 prompt = "Call Rahul after 2 hours and ask him about the project update",
             ),
             QuickAction(
-                title = "Follow up with...",
+                title = "Meeting confirmation",
                 prompt = "Call 8879279251 tomorrow at 9am and tell him the meeting is confirmed",
             ),
         )
@@ -179,6 +225,21 @@ private fun CallAiAppContent(
     onCancelCall: (String) -> Unit,
     onClearMessages: () -> Unit,
 ) {
+    val backdrop = rememberGraphicsLayer()
+    val blurred = rememberGraphicsLayer()
+    var glass by remember { mutableStateOf(Rect.Zero) }
+
+    val haptic = LocalHapticFeedback.current
+    var wasProcessing by remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.isProcessing) {
+        if (wasProcessing && !uiState.isProcessing) {
+            haptic.performHapticFeedback(
+                if (uiState.errorMessage != null) HapticFeedbackType.Reject else HapticFeedbackType.Confirm,
+            )
+        }
+        wasProcessing = uiState.isProcessing
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -191,49 +252,63 @@ private fun CallAiAppContent(
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            when (uiState.selectedTab) {
-                AppTab.Home -> {
-                    HomeTab(
-                        uiState = uiState,
-                        quickActions = quickActions,
-                        onToggleSettings = onToggleSettings,
-                        onPromptChange = onPromptChange,
-                        onSubmitPrompt = onSubmitPrompt,
-                        onConfirmSchedule = onConfirmSchedule,
-                        onQuickActionClick = onQuickActionClick,
-                        onUserNameChange = onUserNameChange,
-                        onUserIdChange = onUserIdChange,
-                        onBackendBaseUrlChange = onBackendBaseUrlChange,
-                        onSetContacts = onSetContacts,
-                        onSetRecording = onSetRecording,
-                        onTranscribeAudio = onTranscribeAudio,
-                        onShowError = onShowError,
-                        onMissingFieldChange = onMissingFieldChange,
-                        onClearMessages = onClearMessages,
-                    )
-                }
+            Crossfade(
+                targetState = uiState.selectedTab,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawWithContent {
+                        backdrop.record { this@drawWithContent.drawContent() }
+                        drawLayer(backdrop)
+                        drawGlass(backdrop, blurred, glass)
+                    },
+                animationSpec = tween(220),
+                label = "tab",
+            ) { tab ->
+                when (tab) {
+                    AppTab.Home -> {
+                        HomeTab(
+                            uiState = uiState,
+                            quickActions = quickActions,
+                            onToggleSettings = onToggleSettings,
+                            onPromptChange = onPromptChange,
+                            onSubmitPrompt = onSubmitPrompt,
+                            onConfirmSchedule = onConfirmSchedule,
+                            onQuickActionClick = onQuickActionClick,
+                            onUserNameChange = onUserNameChange,
+                            onUserIdChange = onUserIdChange,
+                            onBackendBaseUrlChange = onBackendBaseUrlChange,
+                            onSetContacts = onSetContacts,
+                            onSetRecording = onSetRecording,
+                            onTranscribeAudio = onTranscribeAudio,
+                            onShowError = onShowError,
+                            onMissingFieldChange = onMissingFieldChange,
+                            onClearMessages = onClearMessages,
+                        )
+                    }
 
-                AppTab.Scheduled -> {
-                    ScheduledTab(
-                        uiState = uiState,
-                        onRefreshCalls = onRefreshCalls,
-                        onCancelCall = onCancelCall,
-                    )
-                }
+                    AppTab.Scheduled -> {
+                        ScheduledTab(
+                            uiState = uiState,
+                            onRefreshCalls = onRefreshCalls,
+                            onCancelCall = onCancelCall,
+                        )
+                    }
 
-                AppTab.Contacts -> {
-                    ContactsTab(
-                        uiState = uiState,
-                        onOpenSettings = onOpenHomeSettings,
-                        onSetContacts = onSetContacts,
-                        onShowError = onShowError,
-                    )
+                    AppTab.Contacts -> {
+                        ContactsTab(
+                            uiState = uiState,
+                            onOpenSettings = onOpenHomeSettings,
+                            onSetContacts = onSetContacts,
+                            onShowError = onShowError,
+                        )
+                    }
                 }
             }
 
             BottomNavigationBar(
                 selectedTab = uiState.selectedTab,
                 onTabSelected = onSelectTab,
+                onGlassBounds = { glass = it },
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -329,6 +404,11 @@ private fun HomeTab(
         }
     }
 
+    val haptic = LocalHapticFeedback.current
+    LaunchedEffect(uiState.isRecording) {
+        if (uiState.isRecording) haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+    }
+
     val currentHour = ZonedDateTime.now(ZoneId.of("Asia/Kolkata")).hour
     val greeting = when {
         currentHour < 12 -> "Good morning,"
@@ -350,67 +430,82 @@ private fun HomeTab(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.End,
+                    .padding(top = 12.dp)
+                    .reveal(0),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                SmallCircleButton(
+                Text(
+                    text = "$greeting ${uiState.userName.ifBlank { "Ayush" }}",
+                    modifier = Modifier.weight(1f),
+                    color = AppMuted,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                )
+                OutlinedAvatar(
                     onClick = onToggleSettings,
-                    containerColor = Color.White,
-                    label = "+",
-                    contentColor = AppMuted,
+                    initial = uiState.userName.ifBlank { "Ayush" }.take(1).uppercase(),
                 )
             }
 
-            Spacer(modifier = Modifier.height(52.dp))
-
-            WelcomeHeader(
-                greeting = greeting,
-                userName = uiState.userName.ifBlank { "Ayush" },
-            )
-            Text(
-                text = "What would you like me to call?",
-                modifier = Modifier.padding(top = 18.dp),
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 16.sp,
-                    lineHeight = 21.sp,
-                    textAlign = TextAlign.Center,
-                ),
-                color = AppMuted,
-            )
-
-            PromptComposer(
-                prompt = uiState.prompt,
-                onPromptChange = onPromptChange,
-                onSubmitPrompt = onSubmitPrompt,
-                onMicClick = {
-                    if (uiState.isRecording) {
-                        stopRecordingAndTranscribe()
-                    } else if (!hasPermission(context, Manifest.permission.RECORD_AUDIO)) {
-                        recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    } else {
-                        startRecording()
-                    }
-                },
-                isProcessing = uiState.isProcessing,
-                isRecording = uiState.isRecording,
-                processingMessage = uiState.processingMessage,
-                modifier = Modifier.padding(top = 48.dp),
-            )
+            Column(
+                modifier = Modifier
+                    .padding(top = 56.dp)
+                    .fillMaxWidth(),
+            ) {
+                Text(
+                    text = buildAnnotatedString {
+                        append("Who should I\n")
+                        withStyle(SpanStyle(color = AppAccent)) { append("call") }
+                        append(" today?")
+                    },
+                    color = AppText,
+                    style = MaterialTheme.typography.headlineLarge,
+                    modifier = Modifier.reveal(100),
+                )
+                PromptComposer(
+                    prompt = uiState.prompt,
+                    onPromptChange = onPromptChange,
+                    onSubmitPrompt = onSubmitPrompt,
+                    onMicClick = {
+                        if (uiState.isRecording) {
+                            stopRecordingAndTranscribe()
+                        } else if (!hasPermission(context, Manifest.permission.RECORD_AUDIO)) {
+                            recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        } else {
+                            startRecording()
+                        }
+                    },
+                    isProcessing = uiState.isProcessing,
+                    isRecording = uiState.isRecording,
+                    processingMessage = uiState.processingMessage,
+                    modifier = Modifier.padding(top = 28.dp).reveal(200),
+                )
+                FlowActions(
+                    quickActions = quickActions,
+                    onQuickActionClick = onQuickActionClick,
+                    modifier = Modifier.padding(top = 16.dp).reveal(300),
+                )
+            }
 
             if (!hasContactsPermission) {
-                ActionPill(
-                    label = "Allow contacts access",
-                    onClick = { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
+                Text(
+                    text = "Allow contacts access",
+                    modifier = Modifier
+                        .padding(top = 18.dp)
+                        .reveal(400)
+                        .pressable { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
+                    color = AppAccent,
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                 )
             } else if (uiState.contacts.isNotEmpty()) {
                 Text(
                     text = "Using ${uiState.contacts.size} phone contacts for matching.",
-                    modifier = Modifier.padding(top = 18.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp),
                     color = AppMuted,
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
-                        textAlign = TextAlign.Center,
                     ),
                 )
             }
@@ -462,23 +557,6 @@ private fun HomeTab(
                 }
             }
 
-            Text(
-                text = "Try: \"Call John tomorrow at 4 PM and tell him he sucks.\"",
-                modifier = Modifier.padding(top = 18.dp),
-                color = AppMuted,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    textAlign = TextAlign.Center,
-                ),
-            )
-
-            FlowActions(
-                quickActions = quickActions,
-                onQuickActionClick = onQuickActionClick,
-                modifier = Modifier.padding(top = 20.dp),
-            )
-
             DebugCard(
                 feedbackJson = uiState.feedbackJson,
                 modifier = Modifier.padding(top = 20.dp),
@@ -491,7 +569,9 @@ private fun HomeTab(
             visible = uiState.showSettings,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 52.dp)
+                .padding(top = 52.dp),
+            enter = fadeIn() + slideInVertically { -it / 8 },
+            exit = fadeOut() + slideOutVertically { -it / 8 },
         ) {
             SettingsCard(
                 backendBaseUrl = uiState.backendBaseUrl,
@@ -504,6 +584,12 @@ private fun HomeTab(
         }
     }
 }
+
+private val promptExamples = listOf(
+    "Call Rahul tomorrow at 4 PM",
+    "Remind Priya about the meeting",
+    "Wish Dad happy birthday at 9 AM",
+)
 
 @Composable
 private fun PromptComposer(
@@ -524,9 +610,9 @@ private fun PromptComposer(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(24.dp),
-        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, AppLine),
     ) {
         Column(
             modifier = Modifier
@@ -557,16 +643,32 @@ private fun PromptComposer(
                             contentAlignment = Alignment.CenterStart,
                         ) {
                             if (prompt.isBlank()) {
-                                Text(
-                                    text = "Tell me who to call and what to say...",
-                                    color = Color(0xFFA694B8),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.sp,
-                                        lineHeight = 20.sp,
-                                    ),
-                                )
+                                var example by remember { mutableIntStateOf(0) }
+                                LaunchedEffect(Unit) {
+                                    while (true) {
+                                        delay(3500)
+                                        example = (example + 1) % promptExamples.size
+                                    }
+                                }
+                                AnimatedContent(
+                                    targetState = example,
+                                    transitionSpec = {
+                                        (fadeIn() + slideInVertically { it / 2 }) togetherWith
+                                            (fadeOut() + slideOutVertically { -it / 2 })
+                                    },
+                                    label = "placeholder",
+                                ) { index ->
+                                    Text(
+                                        text = promptExamples[index],
+                                        color = AppMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontSize = 15.sp,
+                                            lineHeight = 20.sp,
+                                        ),
+                                    )
+                                }
                             }
                             innerTextField()
                         }
@@ -594,7 +696,7 @@ private fun PromptComposer(
                     SmallCircleButton(
                         onClick = onSubmitPrompt,
                         containerColor = if (isProcessing || isRecording) AppAccentSoft else AppAccent,
-                        contentColor = Color.White,
+                        contentColor = AppOnAccent,
                     ) {
                         ArrowGlyph()
                     }
@@ -647,11 +749,7 @@ private fun MessageBanner(
                 text = "Dismiss",
                 modifier = Modifier
                     .padding(start = 12.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onDismiss,
-                    ),
+                    .pressable(onClick = onDismiss),
                 color = if (isError) AppDanger else AppAccent,
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
             )
@@ -755,7 +853,7 @@ private fun ProcessingCard(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(22.dp),
     ) {
         Column(
@@ -764,7 +862,7 @@ private fun ProcessingCard(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color.White,
+                            AppPanel,
                             AppAccentSoft.copy(alpha = glow),
                         )
                     )
@@ -801,7 +899,7 @@ private fun MissingFieldsCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(18.dp),
     ) {
         Column(
@@ -850,7 +948,7 @@ private fun ConfirmationCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(18.dp),
     ) {
         Column(
@@ -924,31 +1022,24 @@ private fun ConfirmationItem(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FlowActions(
     quickActions: List<QuickAction>,
     onQuickActionClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    FlowRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            quickActions.take(2).forEach { action ->
-                ActionPill(
-                    label = action.title,
-                    onClick = { onQuickActionClick(action.prompt) },
-                )
-            }
+        quickActions.forEach { action ->
+            ActionPill(
+                label = action.title,
+                onClick = { onQuickActionClick(action.prompt) },
+            )
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        ActionPill(
-            label = quickActions.last().title,
-            onClick = { onQuickActionClick(quickActions.last().prompt) },
-        )
     }
 }
 
@@ -963,7 +1054,7 @@ private fun DebugCard(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(18.dp),
     ) {
         Column(
@@ -1001,26 +1092,83 @@ private fun SettingsCard(
     onUserIdChange: (String) -> Unit,
     onUserNameChange: (String) -> Unit,
 ) {
+    val context = LocalContext.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = AppPanel,
-        shape = RoundedCornerShape(20.dp),
-        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(28.dp),
+        shadowElevation = 16.dp,
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(20.dp),
         ) {
             Text(
-                text = "Testing Setup",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
-                ),
+                text = "Settings",
+                style = MaterialTheme.typography.headlineSmall,
+                color = AppText,
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+            FieldLabel("Appearance")
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(AppPanelAlt, RoundedCornerShape(14.dp))
+                    .padding(4.dp),
+            ) {
+                ThemeMode.entries.forEach { mode ->
+                    val selected = AppTheme.mode == mode
+                    val thumb by animateColorAsState(if (selected) AppPanel else AppPanel.copy(alpha = 0f), label = "thumb")
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(thumb, RoundedCornerShape(11.dp))
+                            .pressable(HapticFeedbackType.ToggleOn) { AppTheme.update(context, newMode = mode) }
+                            .padding(vertical = 9.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = mode.label,
+                            color = if (selected) AppText else AppMuted,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontSize = 13.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+            FieldLabel("Accent colour")
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                AccentChoice.entries.forEach { choice ->
+                    val selected = AppTheme.accent == choice
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .pressable(HapticFeedbackType.ToggleOn) { AppTheme.update(context, newAccent = choice) }
+                            .border(2.dp, if (selected) AppText else Color.Transparent, CircleShape)
+                            .padding(4.dp)
+                            .background(if (AppTheme.isDark) choice.dark else choice.light, CircleShape),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(22.dp))
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(AppLine))
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Text(
+                text = "Connection",
+                style = MaterialTheme.typography.titleMedium,
                 color = AppText,
             )
             Text(
-                text = "Physical phone default: http://192.168.29.220:5000/ on the same Wi-Fi. Emulator default: http://10.0.2.2:5000/.",
-                modifier = Modifier.padding(top = 8.dp),
+                text = "Emulator: http://10.0.2.2:5000/. Phone: your PC's address on the same Wi-Fi.",
+                modifier = Modifier.padding(top = 4.dp),
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -1030,26 +1178,32 @@ private fun SettingsCard(
 
             Spacer(modifier = Modifier.height(14.dp))
             FieldLabel("Backend URL")
+            Spacer(modifier = Modifier.height(6.dp))
             FieldInput(
                 value = backendBaseUrl,
                 placeholder = "http://192.168.29.220:5000/",
                 onValueChange = onBackendBaseUrlChange,
+                color = AppPanelAlt,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
             FieldLabel("User ID")
+            Spacer(modifier = Modifier.height(6.dp))
             FieldInput(
                 value = userId,
                 placeholder = "user_001",
                 onValueChange = onUserIdChange,
+                color = AppPanelAlt,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
             FieldLabel("Your name")
+            Spacer(modifier = Modifier.height(6.dp))
             FieldInput(
                 value = userName,
                 placeholder = "Ayush",
                 onValueChange = onUserNameChange,
+                color = AppPanelAlt,
             )
         }
     }
@@ -1085,7 +1239,7 @@ internal fun ScheduledTab(
                     text = "Scheduled",
                     modifier = Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.ExtraBold,
+                        fontWeight = FontWeight.SemiBold,
                         fontSize = 34.sp,
                         lineHeight = 38.sp,
                     ),
@@ -1103,7 +1257,7 @@ internal fun ScheduledTab(
             }
             SmallCircleButton(
                 onClick = onRefreshCalls,
-                containerColor = if (uiState.isRefreshingCalls) AppAccentSoft else Color.White,
+                containerColor = if (uiState.isRefreshingCalls) AppAccentSoft else AppPanel,
                 contentColor = AppAccent,
             ) {
                 DrawableGlyph(
@@ -1131,7 +1285,7 @@ private fun ScheduledCallItem(
     onCancelCall: (String) -> Unit,
 ) {
     Surface(
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(18.dp),
         shadowElevation = 2.dp,
     ) {
@@ -1188,11 +1342,7 @@ private fun ScheduledCallItem(
                     text = "Cancel",
                     modifier = Modifier
                         .padding(top = 12.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onCancelCall(call.id) },
-                        ),
+                        .pressable { onCancelCall(call.id) },
                     color = AppDanger,
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                 )
@@ -1283,7 +1433,7 @@ private fun ContactsTab(
                     modifier = Modifier.padding(top = 8.dp),
                     color = AppText,
                     style = MaterialTheme.typography.headlineSmall.copy(
-                        fontWeight = FontWeight.ExtraBold,
+                        fontWeight = FontWeight.SemiBold,
                         fontSize = 30.sp,
                         lineHeight = 34.sp,
                     ),
@@ -1351,25 +1501,40 @@ private fun ContactsTab(
                 ) {
                     items(visibleContacts, key = { it.id }) { contact ->
                         Surface(
-                            color = Color.White,
+                            color = AppPanel,
                             shape = RoundedCornerShape(18.dp),
                         ) {
-                            Column(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(
-                                    text = contact.name,
-                                    color = AppText,
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                )
-                                Text(
-                                    text = contact.number,
-                                    modifier = Modifier.padding(top = 6.dp),
-                                    color = AppMuted,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .background(AppPanelAlt, CircleShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = contact.name.take(1).uppercase(),
+                                        color = AppMuted,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    )
+                                }
+                                Column(modifier = Modifier.padding(start = 14.dp)) {
+                                    Text(
+                                        text = contact.name,
+                                        color = AppText,
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    )
+                                    Text(
+                                        text = contact.number,
+                                        modifier = Modifier.padding(top = 2.dp),
+                                        color = AppMuted,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -1405,44 +1570,63 @@ private fun ContactsTab(
 private fun BottomNavigationBar(
     selectedTab: AppTab,
     onTabSelected: (AppTab) -> Unit,
+    onGlassBounds: (Rect) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = AppPanel,
-        shadowElevation = 10.dp,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-        ) {
-            NavItem(
-                label = "Home",
-                isActive = selectedTab == AppTab.Home,
-                onClick = { onTabSelected(AppTab.Home) },
-            ) {
-                HomeGlyph(color = if (selectedTab == AppTab.Home) AppAccent else AppMuted)
-            }
-            NavItem(
-                label = "Scheduled",
-                isActive = selectedTab == AppTab.Scheduled,
-                onClick = { onTabSelected(AppTab.Scheduled) },
-            ) {
-                CalendarGlyph(color = if (selectedTab == AppTab.Scheduled) AppAccent else AppMuted)
-            }
-            NavItem(
-                label = "Contacts",
-                isActive = selectedTab == AppTab.Contacts,
-                onClick = { onTabSelected(AppTab.Contacts) },
-            ) {
-                DrawableGlyph(
-                    drawableRes = R.drawable.outline_account_circle_24,
-                    tint = if (selectedTab == AppTab.Contacts) AppAccent else AppMuted,
+    val index = selectedTab.ordinal
+    val lens by animateFloatAsState(index.toFloat(), spring(dampingRatio = 0.65f, stiffness = 380f), label = "lens")
+    val lensColor = AppText.copy(alpha = if (AppTheme.isDark) 0.14f else 0.07f)
+    val capsule = RoundedCornerShape(50)
+    val rim = Brush.verticalGradient(
+        listOf(Color.White.copy(alpha = if (AppTheme.isDark) 0.3f else 0.9f), AppLine),
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 28.dp, vertical = 12.dp)
+            .onGloballyPositioned { onGlassBounds(it.boundsInParent()) }
+            .shadow(16.dp, capsule, ambientColor = Color.Black.copy(alpha = 0.08f), spotColor = Color.Black.copy(alpha = 0.2f))
+            .border(1.dp, rim, capsule)
+            .padding(5.dp)
+            .drawBehind {
+                val cell = size.width / AppTab.entries.size
+                val width = cell * (1f + 0.3f * abs(lens - index))
+                drawRoundRect(
+                    color = lensColor,
+                    topLeft = Offset(cell * (lens + 0.5f) - width / 2f, 0f),
+                    size = Size(width, size.height),
+                    cornerRadius = CornerRadius(size.height / 2f),
                 )
-            }
+            },
+    ) {
+        NavItem("Home", selectedTab == AppTab.Home, { onTabSelected(AppTab.Home) }, Modifier.weight(1f)) {
+            HomeGlyph(it)
         }
+        NavItem("Scheduled", selectedTab == AppTab.Scheduled, { onTabSelected(AppTab.Scheduled) }, Modifier.weight(1f)) {
+            CalendarGlyph(it)
+        }
+        NavItem("Contacts", selectedTab == AppTab.Contacts, { onTabSelected(AppTab.Contacts) }, Modifier.weight(1f)) {
+            DrawableGlyph(drawableRes = R.drawable.outline_account_circle_24, tint = it)
+        }
+    }
+}
+
+private fun DrawScope.drawGlass(source: GraphicsLayer, blurred: GraphicsLayer, bounds: Rect) {
+    if (bounds.isEmpty) return
+    val capsule = Path().apply { addRoundRect(RoundRect(bounds, CornerRadius(bounds.height / 2f))) }
+    clipPath(capsule) {
+        drawRect(AppBackground, bounds.topLeft, bounds.size)
+        val canBlur = Build.VERSION.SDK_INT >= 31
+        if (canBlur) {
+            val edge = 24.dp.toPx()
+            blurred.renderEffect = BlurEffect(16.dp.toPx(), 16.dp.toPx(), TileMode.Clamp)
+            blurred.record(size = IntSize((bounds.width + 2 * edge).toInt(), (bounds.height + 2 * edge).toInt())) {
+                translate(edge - bounds.left, edge - bounds.top) { drawLayer(source) }
+            }
+            translate(bounds.left - edge, bounds.top - edge) { drawLayer(blurred) }
+        }
+        drawRect(AppPanel.copy(alpha = if (canBlur) 0.55f else 0.94f), bounds.topLeft, bounds.size)
     }
 }
 
@@ -1451,34 +1635,59 @@ private fun NavItem(
     label: String,
     isActive: Boolean,
     onClick: () -> Unit,
-    icon: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: @Composable (Color) -> Unit,
 ) {
+    val tint by animateColorAsState(if (isActive) AppAccent else AppMuted, label = "nav-tint")
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            onClick = onClick,
-        ),
+        modifier = modifier.pressable(HapticFeedbackType.SegmentTick, onClick).padding(vertical = 9.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(CircleShape)
-                .background(if (isActive) AppAccentSoft else Color.Transparent),
-            contentAlignment = Alignment.Center,
-        ) {
-            icon()
-        }
+        icon(tint)
         Text(
             text = label,
-            modifier = Modifier.padding(top = 6.dp),
-            color = if (isActive) AppAccent else AppMuted,
+            modifier = Modifier.padding(top = 4.dp),
+            color = tint,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
                 fontSize = 11.sp,
             ),
         )
+    }
+}
+
+private var introPlayed = false
+
+private fun Modifier.reveal(delayMillis: Int): Modifier = composed {
+    val progress = remember { Animatable(if (introPlayed) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        progress.animateTo(1f, tween(500, delayMillis, FastOutSlowInEasing))
+        introPlayed = true
+    }
+    graphicsLayer {
+        alpha = progress.value
+        translationY = (1f - progress.value) * 24.dp.toPx()
+    }
+}
+
+private fun Modifier.pressable(
+    haptic: HapticFeedbackType = HapticFeedbackType.VirtualKey,
+    onClick: () -> Unit,
+): Modifier = composed {
+    val feedback = LocalHapticFeedback.current
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 600f),
+        label = "press",
+    )
+    graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }.clickable(interactionSource = source, indication = null) {
+        feedback.performHapticFeedback(haptic)
+        onClick()
     }
 }
 
@@ -1488,13 +1697,10 @@ private fun ActionPill(
     onClick: () -> Unit,
 ) {
     Surface(
-        color = AppPanelAlt,
+        color = AppPanel,
         shape = RoundedCornerShape(999.dp),
-        modifier = Modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            onClick = onClick,
-        ),
+        border = BorderStroke(1.dp, AppLine),
+        modifier = Modifier.pressable(onClick = onClick),
     ) {
         Text(
             text = label,
@@ -1509,60 +1715,6 @@ private fun ActionPill(
 }
 
 @Composable
-private fun WelcomeHeader(
-    greeting: String,
-    userName: String,
-) {
-    Surface(
-        color = Color.Transparent,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = greeting.uppercase(),
-                color = AppAccent,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.4.sp,
-                ),
-            )
-            Text(
-                text = userName,
-                modifier = Modifier.padding(top = 12.dp),
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 44.sp,
-                    lineHeight = 46.sp,
-                    textAlign = TextAlign.Center,
-                ),
-                color = AppText,
-            )
-            Canvas(
-                modifier = Modifier
-                    .padding(top = 16.dp)
-                    .width(112.dp)
-                    .height(10.dp)
-            ) {
-                drawRoundRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            AppAccentSoft.copy(alpha = 0.15f),
-                            AppAccent.copy(alpha = 0.75f),
-                            AppAccentSoft.copy(alpha = 0.15f),
-                        )
-                    ),
-                    topLeft = Offset.Zero,
-                    size = size,
-                    cornerRadius = CornerRadius(size.height, size.height),
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun FilledActionButton(
     label: String,
     modifier: Modifier = Modifier,
@@ -1571,11 +1723,7 @@ private fun FilledActionButton(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
+            .pressable(onClick = onClick),
         color = AppAccent,
         shape = RoundedCornerShape(999.dp),
     ) {
@@ -1585,12 +1733,32 @@ private fun FilledActionButton(
         ) {
             Text(
                 text = label,
-                color = Color.White,
+                color = AppOnAccent,
                 style = MaterialTheme.typography.labelLarge.copy(
                     fontWeight = FontWeight.Bold,
                 ),
             )
         }
+    }
+}
+
+@Composable
+private fun OutlinedAvatar(
+    onClick: () -> Unit,
+    initial: String,
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .pressable(onClick = onClick)
+            .border(1.dp, AppLine, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = initial,
+            color = AppText,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+        )
     }
 }
 
@@ -1605,11 +1773,7 @@ private fun SmallCircleButton(
     Surface(
         modifier = Modifier
             .size(38.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
+            .pressable(onClick = onClick),
         color = containerColor,
         shape = CircleShape,
     ) {
@@ -1660,10 +1824,11 @@ private fun FieldInput(
     value: String,
     placeholder: String,
     onValueChange: (String) -> Unit,
+    color: Color = AppPanel,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = color,
         shape = RoundedCornerShape(14.dp),
     ) {
         BasicTextField(
@@ -1733,7 +1898,7 @@ private fun SectionHeader(
 private fun StatusBadge(label: String) {
     val background = when (label.lowercase()) {
         "connected" -> AppAccentSoft
-        "pending" -> Color(0xFFF6EFE3)
+        "pending" -> Color(0x33C98A2E)
         "failed", "cancelled" -> AppDangerSoft
         else -> AppPanelAlt
     }
@@ -1877,7 +2042,7 @@ private fun StopGlyph(color: Color = Color.White) {
 }
 
 @Composable
-private fun ArrowGlyph(color: Color = Color.White) {
+private fun ArrowGlyph(color: Color = AppOnAccent) {
     Canvas(modifier = Modifier.size(16.dp)) {
         drawLine(
             color = color,
