@@ -17,6 +17,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -79,6 +80,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ayush.madv2.R
+import com.ayush.madv2.ui.theme.AccentChoice
 import com.ayush.madv2.ui.theme.AppAccent
 import com.ayush.madv2.ui.theme.AppAccentSoft
 import com.ayush.madv2.ui.theme.AppBackground
@@ -86,10 +88,13 @@ import com.ayush.madv2.ui.theme.AppDanger
 import com.ayush.madv2.ui.theme.AppDangerSoft
 import com.ayush.madv2.ui.theme.AppLine
 import com.ayush.madv2.ui.theme.AppMuted
+import com.ayush.madv2.ui.theme.AppOnAccent
 import com.ayush.madv2.ui.theme.AppPanel
 import com.ayush.madv2.ui.theme.AppPanelAlt
 import com.ayush.madv2.ui.theme.AppText
+import com.ayush.madv2.ui.theme.AppTheme
 import com.ayush.madv2.ui.theme.MADv2Theme
+import com.ayush.madv2.ui.theme.ThemeMode
 import java.io.File
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
@@ -355,7 +360,7 @@ private fun HomeTab(
             ) {
                 SmallCircleButton(
                     onClick = onToggleSettings,
-                    containerColor = Color.White,
+                    containerColor = AppPanel,
                     label = "+",
                     contentColor = AppMuted,
                 )
@@ -524,7 +529,7 @@ private fun PromptComposer(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(24.dp),
         shadowElevation = 6.dp,
     ) {
@@ -559,7 +564,7 @@ private fun PromptComposer(
                             if (prompt.isBlank()) {
                                 Text(
                                     text = "Tell me who to call and what to say...",
-                                    color = Color(0xFFA694B8),
+                                    color = AppMuted,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodyLarge.copy(
@@ -594,7 +599,7 @@ private fun PromptComposer(
                     SmallCircleButton(
                         onClick = onSubmitPrompt,
                         containerColor = if (isProcessing || isRecording) AppAccentSoft else AppAccent,
-                        contentColor = Color.White,
+                        contentColor = AppOnAccent,
                     ) {
                         ArrowGlyph()
                     }
@@ -755,7 +760,7 @@ private fun ProcessingCard(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(22.dp),
     ) {
         Column(
@@ -764,7 +769,7 @@ private fun ProcessingCard(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color.White,
+                            AppPanel,
                             AppAccentSoft.copy(alpha = glow),
                         )
                     )
@@ -801,7 +806,7 @@ private fun MissingFieldsCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(18.dp),
     ) {
         Column(
@@ -850,7 +855,7 @@ private fun ConfirmationCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(18.dp),
     ) {
         Column(
@@ -963,7 +968,7 @@ private fun DebugCard(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(18.dp),
     ) {
         Column(
@@ -1051,6 +1056,43 @@ private fun SettingsCard(
                 placeholder = "Ayush",
                 onValueChange = onUserNameChange,
             )
+
+            val context = LocalContext.current
+            Spacer(modifier = Modifier.height(18.dp))
+            FieldLabel("Appearance")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThemeMode.entries.forEach { mode ->
+                    val selected = AppTheme.mode == mode
+                    Surface(
+                        color = if (selected) AppAccent else AppPanelAlt,
+                        shape = RoundedCornerShape(999.dp),
+                        modifier = Modifier.clickable { AppTheme.update(context, newMode = mode) },
+                    ) {
+                        Text(
+                            text = mode.label,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                            color = if (selected) AppOnAccent else AppText,
+                            style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            FieldLabel("Accent colour")
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                AccentChoice.entries.forEach { choice ->
+                    val selected = AppTheme.accent == choice
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .border(2.dp, if (selected) AppText else Color.Transparent, CircleShape)
+                            .padding(4.dp)
+                            .background(if (AppTheme.isDark) choice.dark else choice.light, CircleShape)
+                            .clickable { AppTheme.update(context, newAccent = choice) },
+                    )
+                }
+            }
         }
     }
 }
@@ -1103,7 +1145,7 @@ internal fun ScheduledTab(
             }
             SmallCircleButton(
                 onClick = onRefreshCalls,
-                containerColor = if (uiState.isRefreshingCalls) AppAccentSoft else Color.White,
+                containerColor = if (uiState.isRefreshingCalls) AppAccentSoft else AppPanel,
                 contentColor = AppAccent,
             ) {
                 DrawableGlyph(
@@ -1131,7 +1173,7 @@ private fun ScheduledCallItem(
     onCancelCall: (String) -> Unit,
 ) {
     Surface(
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(18.dp),
         shadowElevation = 2.dp,
     ) {
@@ -1351,7 +1393,7 @@ private fun ContactsTab(
                 ) {
                     items(visibleContacts, key = { it.id }) { contact ->
                         Surface(
-                            color = Color.White,
+                            color = AppPanel,
                             shape = RoundedCornerShape(18.dp),
                         ) {
                             Column(
@@ -1585,7 +1627,7 @@ private fun FilledActionButton(
         ) {
             Text(
                 text = label,
-                color = Color.White,
+                color = AppOnAccent,
                 style = MaterialTheme.typography.labelLarge.copy(
                     fontWeight = FontWeight.Bold,
                 ),
@@ -1663,7 +1705,7 @@ private fun FieldInput(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = AppPanel,
         shape = RoundedCornerShape(14.dp),
     ) {
         BasicTextField(
@@ -1733,7 +1775,7 @@ private fun SectionHeader(
 private fun StatusBadge(label: String) {
     val background = when (label.lowercase()) {
         "connected" -> AppAccentSoft
-        "pending" -> Color(0xFFF6EFE3)
+        "pending" -> Color(0x33C98A2E)
         "failed", "cancelled" -> AppDangerSoft
         else -> AppPanelAlt
     }
@@ -1877,7 +1919,7 @@ private fun StopGlyph(color: Color = Color.White) {
 }
 
 @Composable
-private fun ArrowGlyph(color: Color = Color.White) {
+private fun ArrowGlyph(color: Color = AppOnAccent) {
     Canvas(modifier = Modifier.size(16.dp)) {
         drawLine(
             color = color,
