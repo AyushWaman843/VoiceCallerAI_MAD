@@ -1,5 +1,9 @@
 package com.ayush.madv2
 
+import android.app.UiModeManager
+import android.content.res.Configuration
+import android.content.res.Resources
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.viewModels
@@ -14,6 +18,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.*
@@ -41,6 +46,15 @@ import com.ayush.madv2.ui.components.VoxieTransition
 class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     private val payments: PaymentViewModel by viewModels()
 
+    private fun applyLaunchTheme(choice: String) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val systemDark = Resources.getSystem().configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+            Configuration.UI_MODE_NIGHT_YES
+        val dark = choice == "Dark" || (choice == "System" && systemDark)
+        getSystemService(UiModeManager::class.java).setApplicationNightMode(
+            if (dark) UiModeManager.MODE_NIGHT_YES else UiModeManager.MODE_NIGHT_NO)
+    }
+
     override fun onPaymentSuccess(paymentId: String?, data: PaymentData?) {
         payments.received(data?.orderId, paymentId, data?.signature)
     }
@@ -64,8 +78,16 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val savedTheme = getSharedPreferences("pocketcall_preferences", MODE_PRIVATE).getString("theme", "System")
+        applyLaunchTheme(savedTheme ?: "System")
+        val systemDark = Resources.getSystem().configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+            Configuration.UI_MODE_NIGHT_YES
+        window.decorView.setBackgroundColor(if (savedTheme == "Dark" || (savedTheme == "System" && systemDark))
+            android.graphics.Color.rgb(32, 33, 35) else android.graphics.Color.rgb(247, 247, 249))
         enableEdgeToEdge()
         setContent {
+            var theme by remember { mutableStateOf(getSharedPreferences("pocketcall_preferences", MODE_PRIVATE).getString("theme", "System")) }
+            val dark = theme == "Dark" || (theme == "System" && isSystemInDarkTheme())
             val auth: AuthViewModel = viewModel()
             val authState by auth.state.collectAsStateWithLifecycle()
             val account by AccountSession.account.collectAsStateWithLifecycle()
@@ -77,7 +99,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 else buyingCredits = false
             }
             BackHandler(!showLanding && account == null && !authState.busy) { showLanding = true }
-            MADv2Theme(dynamicColor = false, darkTheme = false) {
+            MADv2Theme(dynamicColor = false, darkTheme = dark) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val stage = when {
                         showLanding -> "welcome"
@@ -89,8 +111,8 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                     if (visibleStage != "app") {
                         SideEffect {
                             WindowCompat.getInsetsController(window, window.decorView).apply {
-                                isAppearanceLightStatusBars = true
-                                isAppearanceLightNavigationBars = true
+                                isAppearanceLightStatusBars = !dark
+                                isAppearanceLightNavigationBars = !dark
                             }
                         }
                         when {
@@ -109,7 +131,8 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                         account?.let { signedIn -> key(signedIn.user.id) {
                             AccountApp(signedIn, auth::signOut, auth::setBackend,
                                 edition = authState.edition ?: "personal",
-                                onCredits = { payments.start(); buyingCredits = true })
+                                onCredits = { payments.start(); buyingCredits = true },
+                                onThemeChanged = { theme = it; applyLaunchTheme(it) })
                         } }
                     }
                     }
@@ -117,11 +140,17 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        if (getSharedPreferences("pocketcall_preferences", MODE_PRIVATE).getString("theme", "System") == "System")
+            applyLaunchTheme("System")
+    }
 }
 
 @Composable
 private fun AccountApp(account: SavedAccount, onSignOut: () -> Unit, onBackend: (String) -> Unit,
-                       edition: String, onCredits: () -> Unit) {
+                       edition: String, onCredits: () -> Unit, onThemeChanged: (String) -> Unit) {
     // Disposing the account screen cancels its work and removes the previous user's calls.
     val owner = remember { object : ViewModelStoreOwner { override val viewModelStore = ViewModelStore() } }
     DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
@@ -132,5 +161,5 @@ private fun AccountApp(account: SavedAccount, onSignOut: () -> Unit, onBackend: 
     val business: BusinessViewModel = viewModel(viewModelStoreOwner = owner)
     val profile: ProfileViewModel = viewModel(viewModelStoreOwner = owner)
     CallAiApp(calls, onSignOut, onBackend, mode = edition, onCredits = onCredits,
-        business = business, profile = profile)
+        business = business, profile = profile, onThemeChanged = onThemeChanged)
 }

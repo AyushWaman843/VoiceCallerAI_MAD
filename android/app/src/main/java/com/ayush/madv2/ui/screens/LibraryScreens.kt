@@ -5,6 +5,7 @@ import com.ayush.madv2.ui.components.VoxieOutlinedButton as OutlinedButton
 import com.ayush.madv2.ui.components.VoxieTextButton as TextButton
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -185,7 +186,7 @@ fun SettingsScreen(
         SettingsCategory(SettingsPage.Calling, "Calling", "Call confirmations", Glyph.Calls, "schedule automatic confirm"),
         SettingsCategory(SettingsPage.Permissions, "Permissions", "Microphone and contacts access", Glyph.Check, "phone app settings"),
         SettingsCategory(SettingsPage.Connection, "Connection", "Backend server address", Glyph.Refresh, "url network server"),
-        SettingsCategory(SettingsPage.About, "About Voxie", "Version and app details", Glyph.Bell, "help information"),
+        SettingsCategory(SettingsPage.About, "About Voxie", "How it works and app details", Glyph.Bell, "help information version calling privacy"),
     )
     val results = categories.filter { category ->
         search.isBlank() || listOf(category.title, category.description, category.keywords)
@@ -207,7 +208,8 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         item {
-                            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(24.dp)) {
+                            Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                                 Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                                     PocketIcon(Glyph.Contacts)
                                     Spacer(Modifier.width(14.dp))
@@ -222,7 +224,8 @@ fun SettingsScreen(
                         }
                     }
                     item {
-                        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(24.dp)) {
+                        Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                             Column {
                                 results.forEachIndexed { index, category ->
                                     SettingsCategoryRow(category) { search = ""; onPage(category.page) }
@@ -242,7 +245,8 @@ fun SettingsScreen(
                     when (currentPage) {
                         SettingsPage.Account -> {
                             item {
-                                Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(24.dp)) {
+                                Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                                     Column(Modifier.fillMaxWidth().padding(18.dp),
                                         verticalArrangement = Arrangement.spacedBy(14.dp)) {
                                         OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, modifier = Modifier.fillMaxWidth())
@@ -264,7 +268,8 @@ fun SettingsScreen(
                         }
                         SettingsPage.Appearance -> item { ThemeModeSwitch(theme, onTheme) }
                         SettingsPage.Calling -> item {
-                            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(24.dp)) {
+                            Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     CallConfirmationSetting()
                                     HorizontalDivider()
@@ -274,7 +279,8 @@ fun SettingsScreen(
                             }
                         }
                         SettingsPage.Permissions -> item {
-                            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(24.dp)) {
+                            Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Text("Voxie uses your microphone for voice prompts and contacts only when you choose to share them.")
                                     Button(onClick = hapticClick(onPermissions), modifier = Modifier.fillMaxWidth()) {
@@ -284,7 +290,8 @@ fun SettingsScreen(
                             }
                         }
                         SettingsPage.Connection -> item {
-                            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(24.dp)) {
+                            Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     OutlinedTextField(backend, { backend = it; backendError = false },
                                         label = { Text("Backend URL") },
@@ -300,10 +307,46 @@ fun SettingsScreen(
                             }
                         }
                         SettingsPage.About -> item {
-                            Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(24.dp)) {
-                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Voxie 1.0", style = MaterialTheme.typography.titleMedium)
-                                    Text("Your AI calling assistant", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val colors = MaterialTheme.colorScheme
+                            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Surface(color = colors.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                                    border = BorderStroke(1.dp, colors.outlineVariant)) {
+                                    Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Text("Voxie 1.0", style = MaterialTheme.typography.titleLarge)
+                                        Text("Your AI calling assistant. Tell Voxie who to call, what to say, and when. You can type or speak naturally.",
+                                            color = colors.onSurfaceVariant)
+                                    }
+                                }
+                                Surface(color = colors.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                                    border = BorderStroke(1.dp, colors.outlineVariant)) {
+                                    Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Text("How calls work", style = MaterialTheme.typography.titleMedium)
+                                        Text("Voxie prepares a spoken message, schedules an outbound call, and lets you follow its status in Calls.",
+                                            color = colors.onSurfaceVariant)
+                                        Text("Calls play a recording. They are one-way, not a live AI conversation.",
+                                            color = colors.onSurfaceVariant)
+                                    }
+                                }
+                                Surface(color = colors.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                                    border = BorderStroke(1.dp, colors.outlineVariant)) {
+                                    Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Text(if (mode == "business") "Business tools" else "Personal calling",
+                                            style = MaterialTheme.typography.titleMedium)
+                                        Text(if (mode == "business")
+                                            "Save contact groups and message templates, import contacts, and schedule group campaigns. Each selected recipient gets a separate call."
+                                            else "Choose contacts from this phone, save favorites, and schedule individual calls. Your phone's contacts are not shared as an account-wide address book.",
+                                            color = colors.onSurfaceVariant)
+                                    }
+                                }
+                                Surface(color = colors.surfaceContainer, shape = RoundedCornerShape(24.dp),
+                                    border = BorderStroke(1.dp, colors.outlineVariant)) {
+                                    Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Text("Good to know", style = MaterialTheme.typography.titleMedium)
+                                        Text("Microphone and contacts access are used only when you choose those features. You can change permissions in your phone's app settings.",
+                                            color = colors.onSurfaceVariant)
+                                        Text("This version uses test credits and requires a working backend and calling provider to place real calls.",
+                                            color = colors.onSurfaceVariant)
+                                    }
                                 }
                             }
                         }
@@ -342,10 +385,11 @@ private fun SettingsCategoryRow(category: SettingsCategory, onClick: () -> Unit)
 private fun ThemeModeSwitch(theme: String, onTheme: (String) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val light = colors.background.luminance() > .5f
-    Surface(color = colors.surface, shape = RoundedCornerShape(24.dp)) {
+    Surface(color = colors.surfaceContainer, shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, colors.outlineVariant)) {
         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Choose a theme", style = MaterialTheme.typography.titleMedium)
-            Row(Modifier.fillMaxWidth().background(colors.surfaceContainer, CircleShape).padding(4.dp)) {
+            Row(Modifier.fillMaxWidth().background(colors.surfaceContainerHigh, CircleShape).padding(4.dp)) {
                 listOf(Triple("System", Glyph.Device, "Follow phone theme"),
                     Triple("Light", Glyph.Sun, "Light theme"),
                     Triple("Dark", Glyph.Moon, "Dark theme")).forEach { (choice, icon, label) ->

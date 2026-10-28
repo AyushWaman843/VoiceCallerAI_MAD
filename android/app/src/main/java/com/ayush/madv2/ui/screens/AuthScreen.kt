@@ -19,6 +19,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -47,18 +48,22 @@ fun AuthScreen(
     var connectionDialog by remember { mutableStateOf(false) }
     var backend by remember(state.backendUrl) { mutableStateOf(state.backendUrl) }
     val keyboard = LocalSoftwareKeyboardController.current
-    val ink = Color(0xFF080D19)
-    val muted = Color(0xFF727D90)
+    val colors = MaterialTheme.colorScheme
+    val dark = colors.background.luminance() < .5f
+    val ink = colors.onBackground
+    val muted = colors.onSurfaceVariant
     val haptics = rememberPocketHaptics()
     LaunchedEffect(state.signup, state.notice) { password = ""; visible = false }
     LaunchedEffect(state.error) { if (state.error != null) haptics.error() }
     LaunchedEffect(state.notice) { if (state.notice != null) haptics.success() }
     fun submit() { keyboard?.hide(); onSubmit(name, email, password) }
 
-    Box(Modifier.fillMaxSize()) {
-        Image(painterResource(R.drawable.landing_bg), contentDescription = null, contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize())
-        Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .89f)))
+    Box(Modifier.fillMaxSize().background(colors.background)) {
+        if (!dark) {
+            Image(painterResource(R.drawable.landing_bg), contentDescription = null, contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = .89f)))
+        }
         Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally) {
             Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().padding(horizontal = 24.dp)) {
@@ -106,17 +111,17 @@ fun AuthScreen(
                     if (state.signup) Text("Use at least 8 characters.", color = muted, fontSize = 12.sp,
                         modifier = Modifier.padding(start = 12.dp, top = 8.dp))
                     state.notice?.let {
-                        Surface(color = Color(0xFFE9F4EE), shape = RoundedCornerShape(14.dp), modifier = Modifier.padding(top = 16.dp)) {
-                            Text(it, color = Color(0xFF245C42), modifier = Modifier.padding(14.dp), fontSize = 14.sp)
+                        Surface(color = colors.surfaceContainer, shape = RoundedCornerShape(14.dp), modifier = Modifier.padding(top = 16.dp)) {
+                            Text(it, color = colors.secondary, modifier = Modifier.padding(14.dp), fontSize = 14.sp)
                         }
                     }
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp), fontSize = 14.sp) }
                     Spacer(Modifier.height(24.dp))
                     Button(onClick = hapticClick { submit() }, enabled = !state.busy,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF060809), contentColor = Color.White),
+                        colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
                         shape = CircleShape, elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                        if (state.busy) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        if (state.busy) CircularProgressIndicator(Modifier.size(20.dp), color = colors.onPrimary, strokeWidth = 2.dp)
                         else {
                             Text(if (state.signup) "Create Account" else "Sign In", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                             Spacer(Modifier.width(16.dp)); PocketIcon(Glyph.Forward, color = LocalContentColor.current)
@@ -152,10 +157,12 @@ private fun AccountField(
 ) {
     OutlinedTextField(value, onValue, enabled = enabled, singleLine = true, label = { Text(label, fontSize = 13.sp) },
         shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth(),
-        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.White.copy(alpha = .9f),
-            focusedContainerColor = Color.White, unfocusedBorderColor = Color(0xFFE5E7EC), focusedBorderColor = Color(0xFF6D8CB6),
-            unfocusedLabelColor = Color(0xFF778294)),
-        leadingIcon = { Icon(painterResource(icon), null, tint = Color(0xFF778294), modifier = Modifier.size(22.dp)) },
+        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            focusedBorderColor = MaterialTheme.colorScheme.secondary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant),
+        leadingIcon = { Icon(painterResource(icon), null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp)) },
         trailingIcon = trailing, visualTransformation = transformation,
         keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = if (onDone == null) ImeAction.Next else ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { if (enabled) onDone?.invoke() }))

@@ -1,9 +1,12 @@
 package com.ayush.madv2.ui.screens
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.graphicsLayer
@@ -39,6 +42,10 @@ fun VoxieHomeScreen(state: CallAiUiState, onMakeCall: () -> Unit, onContacts: ()
                     onGroups: () -> Unit = {}, onTemplates: () -> Unit = {},
                     onViewAll: (Boolean) -> Unit = {}, composer: @Composable () -> Unit) {
     var recent by rememberSaveable { mutableStateOf(false) }
+    val entranceScale = remember { Animatable(.72f) }
+    LaunchedEffect(Unit) {
+        entranceScale.animateTo(1f, spring(dampingRatio = .48f, stiffness = Spring.StiffnessLow))
+    }
     val colors = MaterialTheme.colorScheme
     val greeting = when (LocalTime.now().hour) { in 5..11 -> "Good morning"; in 12..16 -> "Good afternoon"; else -> "Good evening" }
     val name = state.userName.trim().ifBlank { "there" }
@@ -49,14 +56,15 @@ fun VoxieHomeScreen(state: CallAiUiState, onMakeCall: () -> Unit, onContacts: ()
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.ic_voxie_mark), null, Modifier.size(30.dp))
                 Text("Voxie", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp).weight(1f))
-                Box(Modifier.size(48.dp).semantics { contentDescription = "Notifications, coming soon"; disabled() }, contentAlignment = Alignment.Center) {
-                    PocketIcon(Glyph.Bell)
-                }
             }
             Row(Modifier.fillMaxWidth().heightIn(min = 128.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("$greeting,\n$name! 👋", fontSize = 25.sp, lineHeight = 31.sp,
                     letterSpacing = (-.7).sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
-                Image(painterResource(R.drawable.voxie_landing), "Voxie", Modifier.size(135.dp))
+                Image(painterResource(R.drawable.voxie_landing), "Voxie",
+                    Modifier.size(135.dp).graphicsLayer {
+                        scaleX = entranceScale.value
+                        scaleY = entranceScale.value
+                    })
             }
             composer()
             Text("Try: Wish Dad a happy birthday tomorrow at 9 AM. Voxie will ask for anything missing.",
@@ -143,9 +151,11 @@ private fun QuickAction(label: String, glyph: Glyph, tint: Color, modifier: Modi
         }
     }
     if (onClick != null) Surface(onClick = hapticClick(onClick), modifier = modifier.pressMotion(interaction), interactionSource = interaction, shape = RoundedCornerShape(15.dp),
-        color = MaterialTheme.colorScheme.surface, content = content)
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), content = content)
     else Surface(modifier = modifier.semantics { contentDescription = "$label, coming soon"; disabled() },
-        shape = RoundedCornerShape(15.dp), color = MaterialTheme.colorScheme.surface, content = content)
+        shape = RoundedCornerShape(15.dp), color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), content = content)
 }
 
 @Composable

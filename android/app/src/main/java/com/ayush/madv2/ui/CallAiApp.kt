@@ -67,7 +67,7 @@ private enum class Destination { Home, Request, Upcoming, History, Calendar, Con
 fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> Unit = {},
               onBackendChanged: (String) -> Unit = {}, mode: String = "personal",
               onCredits: () -> Unit = {}, business: BusinessViewModel = viewModel(),
-              profile: ProfileViewModel = viewModel()) {
+              profile: ProfileViewModel = viewModel(), onThemeChanged: (String) -> Unit = {}) {
     val state by callAiViewModel.uiState.collectAsStateWithLifecycle()
     val account by AccountSession.account.collectAsStateWithLifecycle()
     val profileState by profile.state.collectAsStateWithLifecycle()
@@ -87,7 +87,6 @@ fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> U
     var pendingCampaignGroup by remember { mutableStateOf<String?>(null) }
     var pendingCampaignPrompt by remember { mutableStateOf("") }
     var addPromptItem by remember { mutableStateOf(false) }
-    var templatePickerOnly by remember { mutableStateOf(false) }
     var attachedGroup by remember(account?.user?.id) { mutableStateOf<BusinessGroup?>(null) }
     var attachedTemplate by remember(account?.user?.id) { mutableStateOf<MessageTemplate?>(null) }
     var selectedCall by remember { mutableStateOf<ScheduledCallUiModel?>(null) }
@@ -138,6 +137,10 @@ fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> U
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
             startRecording()
         else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    fun openPromptAttachments() {
+        addPromptItem = true
+        if (mode == "business") business.loadComposerOptions() else business.loadTemplates()
     }
     fun submitHomePrompt(prompt: String = state.prompt.trim()) {
         if (prompt.isBlank() || state.isProcessing || businessState.busy) return
@@ -321,11 +324,11 @@ fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> U
                                 }
                                 PocketComposer(state.prompt, callAiViewModel::setPrompt, state.isRecording, state.isTranscribing,
                                     state.isProcessing || businessState.busy, capture.samples, homeFocus,
-                                    onPlus = { destination = Destination.Request; addPromptItem = true
-                                        templatePickerOnly = true; business.loadTemplates() }, onMic = ::recordVoice,
+                                    onPlus = { destination = Destination.Request; openPromptAttachments() }, onMic = ::recordVoice,
                                     onCancel = { capture.cancel(); callAiViewModel.setRecording(false) }, onFinish = ::finishVoice,
                                     onSend = { keyboard?.hide(); focus.clearFocus(); submitHomePrompt() },
-                                    homeStyle = true, onFocus = { focusRequest = true; destination = Destination.Request })
+                                    homeStyle = true, onFocus = { focusRequest = true; destination = Destination.Request },
+                                    attachmentLabel = if (mode == "business") "Add group or template" else "Add template")
                             }
                             Destination.Request -> VoxieRequestScreen(state.copy(
                                 isProcessing = state.isProcessing || businessState.busy,
@@ -338,7 +341,7 @@ fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> U
                                 onPreviewAudio = callAiViewModel::previewAudio,
                                 onEdit = callAiViewModel::editConfirmation,
                                 onField = callAiViewModel::updateMissingField,
-                                onPlus = { keyboard?.hide(); addPromptItem = true; templatePickerOnly = true; business.loadTemplates() },
+                                onPlus = { keyboard?.hide(); openPromptAttachments() },
                                 onMic = {
                                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
                                         startRecording()
@@ -365,6 +368,8 @@ fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> U
                                 focusComposer = focusRequest,
                                 templateName = attachedTemplate?.name,
                                 onClearTemplate = { attachedTemplate = null },
+                                groupName = if (mode == "business") attachedGroup?.name else null,
+                                onClearGroup = { attachedGroup = null },
                                 onNewChat = { keyboard?.hide(); focus.clearFocus(); newCall() },
                             )
                             Destination.Upcoming -> CallsScreen(state.upcomingCalls, state.isRefreshingCalls, state.errorMessage,
@@ -400,7 +405,7 @@ fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> U
                                     navigate(Destination.Request)
                                 }, onSheet = { sheetGroup = it })
                             Destination.Settings -> SettingsScreen(state.copy(userName = account?.user?.fullName ?: state.userName), theme,
-                                onTheme = { theme = it; preferences.edit().putString("theme", it).apply() },
+                                onTheme = { theme = it; preferences.edit().putString("theme", it).apply(); onThemeChanged(it) },
                                 onSignOut = onSignOut,
                                 onBackend = onBackendChanged,
                                 onPermissions = {
@@ -440,7 +445,7 @@ fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> U
                 templates = businessState.templates, onLoadTemplates = business::loadTemplates)
         }
         if (addPromptItem) PromptAttachmentPicker(businessState.groups, businessState.templates, businessState.busy,
-            templatesOnly = templatePickerOnly,
+            templatesOnly = mode != "business",
             onDismiss = { addPromptItem = false },
             onGroup = { attachedGroup = it; addPromptItem = false },
             onTemplate = { attachedTemplate = it; addPromptItem = false })

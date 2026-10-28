@@ -49,6 +49,7 @@ fun VoxieRequestScreen(
     mode: String = "personal", timezone: String = "Asia/Kolkata",
     focusComposer: Boolean = false,
     templateName: String? = null, onClearTemplate: () -> Unit = {},
+    groupName: String? = null, onClearGroup: () -> Unit = {},
     onNewChat: () -> Unit = {},
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -176,6 +177,21 @@ fun VoxieRequestScreen(
                 PocketIconButton(Glyph.Close, "Dismiss error", onClick = onDismissError)
             }
         }
+        groupName?.let { name ->
+            Surface(modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                Row(Modifier.height(32.dp).padding(start = 10.dp, end = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    PocketIcon(Glyph.Groups, "Selected group", MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.width(6.dp))
+                    Text(name, style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary, maxLines = 1)
+                    IconButton(onClick = hapticClick(onClearGroup), modifier = Modifier.size(32.dp)) {
+                        PocketIcon(Glyph.Close, "Remove group", MaterialTheme.colorScheme.secondary)
+                    }
+                }
+            }
+        }
         templateName?.let { name ->
             Surface(modifier = Modifier.padding(start = 16.dp, top = 4.dp),
                 shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
@@ -192,7 +208,8 @@ fun VoxieRequestScreen(
             }
         }
         PocketComposer(state.prompt, onPrompt, state.isRecording, state.isTranscribing,
-            state.isProcessing, samples, focusRequester, onPlus, onMic, onCancelRecording, onFinishRecording, onSubmit, homeStyle = true)
+            state.isProcessing, samples, focusRequester, onPlus, onMic, onCancelRecording, onFinishRecording, onSubmit,
+            homeStyle = true, attachmentLabel = if (mode == "business") "Add group or template" else "Add template")
     }
 }
 

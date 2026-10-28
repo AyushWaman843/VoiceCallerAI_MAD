@@ -2,7 +2,7 @@ import json
 
 from flask import current_app
 
-from ..models import AccountPlan, CreditEvent
+from ..models import AccountPlan, Campaign, CallJob, CreditEvent
 from ..routes.payments import CreditPurchase
 
 DEFAULT_PLANS = {
@@ -65,15 +65,24 @@ def reserve(db, account, job_id):
 
 
 def settle(db, job, outcome):
-    if job.credit_state != "reserved":
-        return
-    account = db.query(AccountPlan).filter_by(user_id=job.user_id).with_for_update().first()
-    if not account:
-        return
-    if outcome in ("failed", "missed", "cancelled"):
-        account.credits_available += 1
-        db.add(CreditEvent(user_id=job.user_id, change=1, source_type="refund",
-                           source_id=job.credit_reservation_id or job.id))
-        job.credit_state = "refunded"
-    else:
-        job.credit_state = "consumed"
+    if job.credit_state == "reserved":
+        account = db.query(AccountPlan).filter_by(user_id=job.user_id).with_for_update().first()
+        if account:
+            if outcome in ("failed", "missed", "cancelled"):
+                account.credits_available += 1
+                db.add(CreditEvent(user_id=job.user_id, change=1, source_type="refund",
+                                   source_id=job.credit_reservation_id or job.id))
+                job.credit_state = "refunded"
+            else:
+                job.credit_state = "consumed"
+
+    if job.campaign_id and outcome in ("connected", "failed", "missed", "cancelled"):
+        db.flush()
+        remaining = db.query(CallJob.id).filter(
+            CallJob.campaign_id == job.campaign_id,
+            CallJob.status.in_(("pending", "calling")),
+        ).first()
+        if not remaining:
+            campaign = db.query(Campaign).filter_by(id=job.campaign_id, user_id=job.user_id).first()
+            if campaign and campaign.status == "scheduled":
+                campaign.status = "finished"

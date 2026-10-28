@@ -11,6 +11,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ayush.madv2.ui.*
 import com.ayush.madv2.ui.components.*
+import kotlinx.coroutines.delay
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
@@ -58,6 +60,12 @@ fun BusinessScreen(model: BusinessViewModel, timezone: String = "Asia/Kolkata",
     }
     val chosen = state.groups.find { it.id == selectedGroup }
     LaunchedEffect(Unit) { model.refresh() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(20_000)
+            model.refreshCampaigns()
+        }
+    }
     LaunchedEffect(initialGroupId) {
         if (initialGroupId != null) {
             selectedGroup = initialGroupId
@@ -105,7 +113,8 @@ fun BusinessScreen(model: BusinessViewModel, timezone: String = "Asia/Kolkata",
             val expanded = selectedGroup == group.id
             val eligible = group.contacts.count { it.consent_status == "approved" }
             var menuOpen by remember(group.id) { mutableStateOf(false) }
-            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface,
+            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -190,7 +199,8 @@ fun BusinessScreen(model: BusinessViewModel, timezone: String = "Asia/Kolkata",
             }
         }
         items(state.campaigns, key = { it.id }) { campaign ->
-            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface,
+            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

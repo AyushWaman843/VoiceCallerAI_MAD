@@ -110,6 +110,13 @@ class BusinessViewModel : ViewModel() {
         mutable.value = mutable.value.copy(groups = loadedGroups, campaigns = loadedCampaigns)
     }
     fun refresh() = run { refresh(it) }
+    fun refreshCampaigns() {
+        if (mutable.value.busy) return
+        viewModelScope.launch {
+            runCatching { api().campaigns().authBody().campaigns }
+                .onSuccess { campaigns -> mutable.value = mutable.value.copy(campaigns = campaigns, error = null) }
+        }
+    }
     fun createGroup(name: String) = run { api -> api.create(mapOf("name" to name)).authBody(); refresh(api) }
     fun rename(id: String, name: String) = run { api -> api.rename(id, mapOf("name" to name)).authBody(); refresh(api) }
     fun delete(id: String) = run { api -> api.delete(id).authBody(); refresh(api) }

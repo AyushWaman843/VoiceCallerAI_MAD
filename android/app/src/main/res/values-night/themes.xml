@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MADv2" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#202123</item>
+        <item name="android:windowSplashScreenBackground">#202123</item>
+    </style>
+</resources>

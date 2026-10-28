@@ -4,6 +4,7 @@ import com.ayush.madv2.ui.components.VoxieFilledIconButton as FilledIconButton
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -34,11 +35,13 @@ fun PocketComposer(
     onFinish: () -> Unit, onSend: () -> Unit,
     homeStyle: Boolean = false,
     onFocus: () -> Unit = {},
+    attachmentLabel: String = "Add to call",
 ) {
     val colors = MaterialTheme.colorScheme
     val longHomePrompt = homeStyle && (text.length > 36 || '\n' in text)
     Surface(
-        color = if (homeStyle) colors.surface else colors.surfaceContainer, shape = RoundedCornerShape(28.dp),
+        color = colors.surfaceContainerHigh, shape = RoundedCornerShape(28.dp),
+        border = BorderStroke(1.dp, colors.outlineVariant),
         shadowElevation = if (homeStyle) 2.dp else 0.dp,
         modifier = Modifier.fillMaxWidth().padding(horizontal = if (homeStyle) 0.dp else 12.dp, vertical = 8.dp)
             .animateContentSize(tween(PocketMotion.Standard)),
@@ -58,7 +61,7 @@ fun PocketComposer(
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically) {
-                        PocketIconButton(Glyph.Plus, "Add group or template", enabled = !busy, onClick = onPlus)
+                        PocketIconButton(Glyph.Plus, attachmentLabel, enabled = !busy, onClick = onPlus)
                         Spacer(Modifier.weight(1f))
                         PocketIconButton(Glyph.Mic, "Record voice message", enabled = !busy, onClick = onMic)
                         Spacer(Modifier.width(4.dp))
@@ -89,7 +92,7 @@ fun PocketComposer(
                         }
                     }
                     else -> {
-                        PocketIconButton(Glyph.Plus, if (homeStyle) "Add group or template" else "Add to call", enabled = !busy, onClick = onPlus)
+                        PocketIconButton(Glyph.Plus, attachmentLabel, enabled = !busy, onClick = onPlus)
                         BasicTextField(
                             value = text, onValueChange = onTextChange, enabled = !busy,
                             textStyle = (if (homeStyle) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge).copy(color = colors.onSurface),

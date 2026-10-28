@@ -105,6 +105,13 @@ class AuthTests(unittest.TestCase):
         self.http.side_effect = requests.Timeout()
         self.assertEqual(self.client.get("/calls", headers=self.headers).status_code, 503)
 
+    def test_transient_account_lookup_is_retried(self):
+        self.http.side_effect = [requests.Timeout(), Mock(status_code=200, ok=True,
+                                                          json=Mock(return_value=self.user))]
+        result = self.client.get("/calls", headers=self.headers)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(self.http.call_count, 2)
+
     def test_list_ignores_forged_user_id(self):
         result = self.client.get("/calls?user_id=user-b", headers=self.headers)
         self.assertEqual([job["user_id"] for job in result.json["upcoming"]], ["user-a"])
