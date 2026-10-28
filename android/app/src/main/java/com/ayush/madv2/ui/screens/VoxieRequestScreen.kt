@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -48,6 +49,7 @@ fun VoxieRequestScreen(
     mode: String = "personal", timezone: String = "Asia/Kolkata",
     focusComposer: Boolean = false,
     templateName: String? = null, onClearTemplate: () -> Unit = {},
+    onNewChat: () -> Unit = {},
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(focusComposer) { if (focusComposer) focusRequester.requestFocus() }
@@ -63,6 +65,19 @@ fun VoxieRequestScreen(
         }
     }
     Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp, top = 2.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Surface(onClick = hapticClick(onNewChat),
+                enabled = !state.isProcessing && !state.isRecording && !state.isTranscribing,
+                shape = CircleShape, color = MaterialTheme.colorScheme.surface) {
+                Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PocketIcon(Glyph.Plus, "Start new chat", MaterialTheme.colorScheme.secondary)
+                    Text("New chat", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val showSuggestions = maxHeight >= 280.dp
             if (state.conversation.isEmpty() && !state.isProcessing) {

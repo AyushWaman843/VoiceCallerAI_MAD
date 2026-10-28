@@ -365,6 +365,7 @@ fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> U
                                 focusComposer = focusRequest,
                                 templateName = attachedTemplate?.name,
                                 onClearTemplate = { attachedTemplate = null },
+                                onNewChat = { keyboard?.hide(); focus.clearFocus(); newCall() },
                             )
                             Destination.Upcoming -> CallsScreen(state.upcomingCalls, state.isRefreshingCalls, state.errorMessage,
                                 onCall = { selectedCall = it }, onRefresh = callAiViewModel::refreshCalls,
