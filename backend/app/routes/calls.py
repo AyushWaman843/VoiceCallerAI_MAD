@@ -9,7 +9,7 @@ from flask import Blueprint, current_app, g, jsonify, request, send_from_directo
 
 from ..database import get_db
 from ..models import AudioPreview, CallJob
-from ..services.llm_service import normalize_indian_number, process_message
+from ..services.llm_service import is_bare_call_request, normalize_indian_number, process_message, reject_prompt_injection
 from ..services.transcription_service import transcribe_audio, transcription_hints
 from ..services.tts_service import generate_audio
 from ..services.auth_service import require_user
@@ -102,6 +102,7 @@ def _build_spoken_message(user_name: str, contact_name: str, message: str) -> st
 
 def _prepare_agent_result(schedule_request: ScheduleCallRequest, current_time_ist,
                           timezone_name: str = "Asia/Kolkata") -> dict:
+    reject_prompt_injection(schedule_request.raw_prompt)
     if schedule_request.agent_result and (schedule_request.confirmed or any((
         schedule_request.chosen_time, schedule_request.confirmed_number,
         schedule_request.confirmed_contact_name, schedule_request.confirmed_message))):
@@ -128,6 +129,10 @@ def _prepare_agent_result(schedule_request: ScheduleCallRequest, current_time_is
         agent_result["message"] = schedule_request.confirmed_message
     if schedule_request.chosen_time:
         agent_result["scheduled_time"] = ensure_ist_datetime(schedule_request.chosen_time).isoformat()
+
+    if not schedule_request.confirmed_message and is_bare_call_request(schedule_request.raw_prompt, agent_result.get("contact_name", "")):
+        agent_result["message"] = ""
+        agent_result["rephrased_message"] = ""
 
     contact_name = str(agent_result.get("contact_name") or "").strip()
     contact_number = normalize_indian_number(str(agent_result.get("contact_number") or ""))

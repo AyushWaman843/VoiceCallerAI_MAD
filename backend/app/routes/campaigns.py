@@ -10,7 +10,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from ..database import get_db
 from ..models import CallJob, Campaign, ContactGroup, GroupContact, MessageTemplate
 from ..services.auth_service import require_user
-from ..services.llm_service import process_message
+from ..services.llm_service import PromptInjectionError, process_message, reject_prompt_injection
 from ..services.plans import require_plan, reserve, settle
 from ..services.tts_service import generate_audio
 from ..services.campaign_timing import interval_from_instruction, recipient_time
@@ -97,6 +97,10 @@ def resolve_recipients():
     prompt = body().get("raw_prompt")
     if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 8000:
         raise PaymentError("Enter a calling instruction.")
+    try:
+        reject_prompt_injection(prompt)
+    except PromptInjectionError as exc:
+        raise PaymentError(str(exc)) from None
     with get_db() as db:
         require_plan(db, g.auth_user["id"], business=True, entitlement="campaigns")
         selection = resolve_group_recipients(db, g.auth_user["id"], prompt)
@@ -108,6 +112,11 @@ def resolve_recipients():
 def preview():
     value = body()
     prompt = value.get("raw_prompt")
+    if isinstance(prompt, str):
+        try:
+            reject_prompt_injection(prompt)
+        except PromptInjectionError as exc:
+            raise PaymentError(str(exc)) from None
     with get_db() as db:
         account = require_plan(db, g.auth_user["id"], business=True, entitlement="campaigns")
         group_id = value.get("group_id")
@@ -143,6 +152,8 @@ def preview():
             try:
                 agent = process_message(prompt, account.organization_name or g.auth_user["full_name"], [],
                     get_current_ist().astimezone(ZoneInfo(account.timezone)), account.timezone, campaign=True)
+            except PromptInjectionError as exc:
+                raise PaymentError(str(exc)) from None
             except Exception:
                 current_app.logger.exception("Campaign message preparation failed")
                 raise PaymentError("Unable to understand the instruction right now. Please try again.", 502) from None
