@@ -7,6 +7,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+codezxsWIN/mad-foundation
 private val LightColors = lightColorScheme(
     primary = Color(0xFF202123), onPrimary = Color.White,
     secondary = Color(0xFF28745D), onSecondary = Color.White,
@@ -31,9 +32,57 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun MADv2Theme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+
+@Composable
+fun MADv2Theme(
+main
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+codezxsWIN/mad-foundation
     MaterialTheme(colorScheme = if (darkTheme) DarkColors else LightColors,
         typography = Typography, content = content)
+
+    AppTheme.systemDark = isSystemInDarkTheme()
+
+    val colorScheme = if (AppTheme.isDark) {
+        darkColorScheme(
+            primary = AppAccent,
+            secondary = AppAccent,
+            tertiary = AppAccent,
+            background = AppBackground,
+            surface = AppPanel,
+            surfaceVariant = AppPanelAlt,
+            outline = AppLine,
+            onPrimary = AppOnAccent,
+            onSecondary = AppOnAccent,
+            onTertiary = AppOnAccent,
+            onBackground = AppText,
+            onSurface = AppText,
+            onSurfaceVariant = AppMuted,
+        )
+    } else {
+        lightColorScheme(
+            primary = AppAccent,
+            secondary = AppAccent,
+            tertiary = AppAccent,
+            background = AppBackground,
+            surface = AppPanel,
+            surfaceVariant = AppPanelAlt,
+            outline = AppLine,
+            onPrimary = AppOnAccent,
+            onSecondary = AppOnAccent,
+            onTertiary = AppOnAccent,
+            onBackground = AppText,
+            onSurface = AppText,
+            onSurfaceVariant = AppMuted,
+        )
+    }
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
+main
 }
