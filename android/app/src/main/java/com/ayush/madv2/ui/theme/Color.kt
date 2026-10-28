@@ -1,5 +1,21 @@
 package com.ayush.madv2.ui.theme
 
+codezxsWIN/mad-foundation
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+
+// Semantic aliases keep the calendar and conversation on the same theme.
+val AppBackground @Composable get() = MaterialTheme.colorScheme.background
+val AppPanel @Composable get() = MaterialTheme.colorScheme.surface
+val AppPanelAlt @Composable get() = MaterialTheme.colorScheme.surfaceVariant
+val AppLine @Composable get() = MaterialTheme.colorScheme.outlineVariant
+val AppText @Composable get() = MaterialTheme.colorScheme.onSurface
+val AppMuted @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
+val AppAccent @Composable get() = MaterialTheme.colorScheme.secondary
+val AppAccentSoft @Composable get() = MaterialTheme.colorScheme.secondary.copy(alpha = .12f)
+val AppDanger @Composable get() = MaterialTheme.colorScheme.error
+val AppDangerSoft @Composable get() = MaterialTheme.colorScheme.errorContainer
+
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,3 +79,4 @@ val AppAccentSoft get() = AppAccent.copy(alpha = if (AppTheme.isDark) 0.22f else
 val AppOnAccent get() = if (AppTheme.isDark) Color(0xFF0B1410) else Color.White
 val AppDanger get() = if (AppTheme.isDark) Color(0xFFE5808B) else Color(0xFFC05A67)
 val AppDangerSoft get() = AppDanger.copy(alpha = 0.12f)
+ main
