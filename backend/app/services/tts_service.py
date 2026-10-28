@@ -1,4 +1,6 @@
 import logging
+import shutil
+import subprocess
 import uuid
 from pathlib import Path
 from urllib.parse import quote
@@ -20,15 +22,42 @@ def _build_public_audio_url(filename: str) -> str:
     return ""
 
 
-def generate_audio(text: str) -> str:
-    # Phase 4 - wire this up after MSG91 is tested.
-    AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+def _convert_for_exotel(source_path: Path, output_path: Path) -> None:
+    ffmpeg_path = shutil.which("ffmpeg")
+    if not ffmpeg_path:
+        raise RuntimeError("ffmpeg is required to convert ElevenLabs audio to Exotel's 8 kHz mono format.")
 
+    result = subprocess.run(
+        [
+            ffmpeg_path,
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            str(source_path),
+            "-ar",
+            "8000",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            str(output_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to convert audio for Exotel: {result.stderr.strip()}")
+
+
+def generate_audio(text: str) -> str:
     if not Config.ELEVENLABS_API_KEY or not Config.ELEVENLABS_VOICE_ID:
-        placeholder_path = AUDIO_OUTPUT_DIR / f"{uuid.uuid4()}.txt"
-        placeholder_path.write_text(text, encoding="utf-8")
-        LOGGER.warning("ElevenLabs credentials are missing, so a placeholder text file was created instead of audio.")
-        return _build_public_audio_url(placeholder_path.name) or str(placeholder_path)
+        raise RuntimeError("ElevenLabs credentials are not configured.")
+    if not Config.PUBLIC_BASE_URL.strip().startswith("https://"):
+        raise RuntimeError("PUBLIC_BASE_URL must be a reachable HTTPS backend before generating audio.")
+    AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     response = requests.post(
         f"https://api.elevenlabs.io/v1/text-to-speech/{Config.ELEVENLABS_VOICE_ID}",
@@ -54,6 +83,13 @@ def generate_audio(text: str) -> str:
         )
         response.raise_for_status()
 
-    audio_path = AUDIO_OUTPUT_DIR / f"{uuid.uuid4()}.mp3"
-    audio_path.write_bytes(response.content)
+    audio_id = uuid.uuid4()
+    source_path = AUDIO_OUTPUT_DIR / f"{audio_id}.mp3"
+    audio_path = AUDIO_OUTPUT_DIR / f"{audio_id}.wav"
+    source_path.write_bytes(response.content)
+    try:
+        # Exotel's dynamic Greeting applet accepts 8 kHz, mono, 16-bit audio.
+        _convert_for_exotel(source_path, audio_path)
+    finally:
+        source_path.unlink(missing_ok=True)
     return _build_public_audio_url(audio_path.name) or str(audio_path)

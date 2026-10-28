@@ -1,5 +1,7 @@
 import logging
 import tempfile
+from threading import Lock, Thread
+from time import perf_counter
 from pathlib import Path
 
 import requests
@@ -9,9 +11,16 @@ from ..config import Config
 
 LOGGER = logging.getLogger(__name__)
 _LOCAL_MODEL = None
+_MODEL_LOCK = Lock()
 
 
 def _load_local_model():
+    # Startup warmup and the first upload can arrive at the same time.
+    with _MODEL_LOCK:
+        return _initialize_local_model()
+
+
+def _initialize_local_model():
     global _LOCAL_MODEL
     if _LOCAL_MODEL is not None:
         return _LOCAL_MODEL
@@ -37,7 +46,42 @@ def _load_local_model():
     return _LOCAL_MODEL
 
 
-def _transcribe_with_local_whisper(file_storage) -> str:
+def warmup_transcription():
+    if str(Config.TRANSCRIPTION_PROVIDER).strip().lower() != "local":
+        return
+
+    def load():
+        try:
+            _load_local_model()
+        except Exception:
+            LOGGER.exception("Whisper preload failed; the next upload will retry.")
+
+    Thread(target=load, name="whisper-preload", daemon=True).start()
+
+
+def transcription_hints(user_id):
+    # Vocabulary hints are account-scoped, bounded, and never select call recipients.
+    from sqlalchemy import literal, select, union_all
+    from ..database import get_db
+    from ..models import ContactGroup, GroupContact, MessageTemplate
+
+    try:
+        with get_db() as db:
+            # One database round trip; group/template names precede contact hints.
+            vocabulary = union_all(*[
+                select(model.name.label("name"), literal(priority).label("priority"))
+                .where(model.user_id == user_id)
+                for priority, model in enumerate((ContactGroup, MessageTemplate, GroupContact))
+            ]).order_by("priority", "name").limit(80)
+            names = [row[0] for row in db.execute(vocabulary)]
+        return ", ".join(dict.fromkeys(names))[:500] or None
+    except Exception:
+        LOGGER.warning("Transcribing without saved-name hints: vocabulary lookup failed.")
+        return None
+
+
+def _transcribe_with_local_whisper(file_storage, hotwords=None) -> str:
+    started = perf_counter()
     model = _load_local_model()
 
     suffix = Path(file_storage.filename or "prompt.m4a").suffix or ".m4a"
@@ -52,6 +96,9 @@ def _transcribe_with_local_whisper(file_storage) -> str:
             task="transcribe",
             beam_size=5,
             vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 500, "speech_pad_ms": 400},
+            without_timestamps=True,
+            hotwords=hotwords,
         )
         text = " ".join(segment.text.strip() for segment in segments).strip()
     finally:
@@ -59,6 +106,7 @@ def _transcribe_with_local_whisper(file_storage) -> str:
 
     if not text:
         raise RuntimeError("Local Whisper returned an empty transcription.")
+    LOGGER.info("Local transcription completed in %.2fs.", perf_counter() - started)
     return text
 
 
@@ -97,7 +145,7 @@ def _transcribe_with_openai(file_storage) -> str:
     return text
 
 
-def transcribe_audio(file_storage) -> str:
+def transcribe_audio(file_storage, hotwords=None) -> str:
     if file_storage is None or not getattr(file_storage, "filename", ""):
         raise ValueError("An audio file is required.")
 
@@ -105,4 +153,4 @@ def transcribe_audio(file_storage) -> str:
     if provider == "openai":
         return _transcribe_with_openai(file_storage)
 
-    return _transcribe_with_local_whisper(file_storage)
+    return _transcribe_with_local_whisper(file_storage, hotwords=hotwords)

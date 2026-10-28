@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from datetime import timedelta
 from difflib import SequenceMatcher
 
 from openai import OpenAI
@@ -65,6 +66,46 @@ def normalize_indian_number(number: str) -> str:
 def _extract_prompt_number(raw_prompt: str) -> str:
     phone_match = PHONE_PATTERN.search(raw_prompt)
     return normalize_indian_number(phone_match.group(0)) if phone_match else ""
+
+
+def _extract_clear_relative_time(raw_prompt: str, current_time):
+    """Resolve common explicit relative times without spending another LLM request."""
+    prompt = raw_prompt.lower().strip()
+    duration = re.search(r"\b(?:in|after)\s+(\d{1,4})\s*(minutes?|mins?|hours?|hrs?)\b", prompt)
+    if duration:
+        amount = int(duration.group(1))
+        delta = timedelta(hours=amount) if duration.group(2).startswith(("hour", "hr")) else timedelta(minutes=amount)
+        return (current_time + delta).replace(second=0, microsecond=0).isoformat()
+
+    clock = re.search(r"\b(?:at\s*)?(1[0-2]|0?[1-9])(?:[:.]([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?)\b", prompt)
+    clock24 = re.search(r"\b(?:at\s*)?([01]?\d|2[0-3]):([0-5]\d)\b", prompt) if not clock else None
+    if not clock and not clock24:
+        return None
+    if clock:
+        hour, minute = int(clock.group(1)), int(clock.group(2) or 0)
+        meridiem = clock.group(3).replace(".", "")
+        hour = (hour % 12) + (12 if meridiem == "pm" else 0)
+    else:
+        hour, minute = int(clock24.group(1)), int(clock24.group(2))
+
+    target_date = current_time.date()
+    if "day after tomorrow" in prompt:
+        target_date += timedelta(days=2)
+    elif "tomorrow" in prompt:
+        target_date += timedelta(days=1)
+    else:
+        weekdays = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+                    "friday": 4, "saturday": 5, "sunday": 6}
+        named = next((value for name, value in weekdays.items() if re.search(rf"\b{name}\b", prompt)), None)
+        if named is not None:
+            days = (named - current_time.weekday()) % 7
+            if "next week" in prompt:
+                days = days + 7 if days else 7
+            elif "next" in prompt and days == 0:
+                days = 7
+            target_date += timedelta(days=days)
+    return current_time.replace(year=target_date.year, month=target_date.month, day=target_date.day,
+                                hour=hour, minute=minute, second=0, microsecond=0).isoformat()
 
 
 def _normalize_name(value: str) -> str:
@@ -280,10 +321,12 @@ def _normalize_result(
         "scheduled_time": scheduled_time,
         "time_extracted": time_extracted,
         "missing_fields": missing_fields,
+        "interval": payload.get("interval"),
     }
 
 
-def process_message(raw_prompt: str, user_name: str, contacts: list[dict], current_time_ist) -> dict:
+def process_message(raw_prompt: str, user_name: str, contacts: list[dict], current_time_ist,
+                    timezone_name: str = "Asia/Kolkata", campaign: bool = False) -> dict:
     direct_number = _extract_prompt_number(raw_prompt)
     fallback_payload = {
         "contact_name": "",
@@ -294,34 +337,50 @@ def process_message(raw_prompt: str, user_name: str, contacts: list[dict], curre
     }
 
     if not Config.DEEPSEEK_API_KEY:
+        if campaign:
+            raise ValueError("DeepSeek is required to prepare campaign instructions.")
         LOGGER.warning("DEEPSEEK_API_KEY is not configured, so only deterministic agent extraction is available.")
+        deterministic_time = _extract_clear_relative_time(raw_prompt, current_time_ist)
+        if deterministic_time:
+            fallback_payload["scheduled_time"] = deterministic_time
+            fallback_payload["time_extracted"] = True
         return _normalize_result(fallback_payload, raw_prompt, user_name, contacts, direct_number)
 
     client = OpenAI(api_key=Config.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
     system_prompt = (
         "You are a call-scheduling extraction agent. Return ONLY one valid JSON object with exactly these keys: "
-        '"contact_name", "contact_number", "message", "rephrased_message", "scheduled_time", '
-        '"time_extracted", and "missing_fields". '
+        '"contact_name", "message", "rephrased_message", "scheduled_time". '
         "Identify who should be called, extract only the core message to speak, and resolve the requested time using "
-        "the supplied current IST timestamp. Understand tomorrow, day after tomorrow, next Friday, this Saturday, "
+        f"the supplied current timestamp in {timezone_name}. Understand tomorrow, day after tomorrow, next Friday, this Saturday, "
         "after N hours, in N minutes, and next week plus a weekday and time. scheduled_time must be ISO8601 with "
-        "+05:30, or null when absent. time_extracted is true only when the prompt contains a resolvable time. "
+        "the timezone's numeric UTC offset, or null when absent. "
         "Choose contact_name only from the supplied contacts when a clear match exists. If a phone number appears "
         "directly in the prompt, use it and do not require a contacts match; use the person's stated name, or the "
-        "number itself if no name is stated. contact_number should be +91 followed by 10 digits when known. "
+        "number itself if no name is stated. Phone numbers are resolved by the backend. "
         "Preserve the user's language, code-switching, slang, and mixed Indian-language phrasing in the extracted "
         "message and in the rephrased_message body. Do not translate unless the user explicitly asks for translation. "
         "rephrased_message must sound natural and start exactly with: "
         f'"Hi [contact_name], this is an automated message on behalf of {user_name}." '
-        "Do not speak the scheduling instruction or call command. missing_fields must list only genuinely missing "
-        "values from contact_name, contact_number, message, and scheduled_time."
+        "Do not speak the scheduling instruction or call command. Do not invent absent information."
     )
+    # Compact pairs preserve every name/number and ambiguity without repeated JSON field names.
+    contact_context = list(dict.fromkeys((str(c.get("name", "")).strip(), str(c.get("number", "")).strip())
+        for c in contacts if c.get("name"))) if not direct_number and not campaign else []
     user_prompt = (
-        f"Current IST time: {current_time_ist.isoformat()}\n"
-        f"Logged-in user name: {user_name}\n"
-        f"Contacts: {json.dumps(contacts, ensure_ascii=True)}\n"
+        f"Current time ({timezone_name}): {current_time_ist.isoformat()}\n"
+        f"Contacts [name,number]: {json.dumps(contact_context, ensure_ascii=False, separators=(',', ':'))}\n"
         f"Raw request: {raw_prompt}"
     )
+    if campaign:
+        system_prompt += (
+            ' This is a group campaign whose recipients are already selected by the backend. '
+            'Do not select or change recipients. Also return "interval": null for simultaneous calls, '
+            'or {"amount": positive number, "unit": "second|minute|hour|day|week|month|year"} '
+            'for the gap BETWEEN successive recipients. scheduled_time is the FIRST call time, '
+            'not the interval. If only a gap is specified, scheduled_time must be null. '
+            'Understand spoken number words and mixed languages. Each recipient is called once. '
+            'Exclude recipient-selection, interval, and template instructions from the spoken message.'
+        )
 
     try:
         response = client.chat.completions.create(
@@ -334,7 +393,19 @@ def process_message(raw_prompt: str, user_name: str, contacts: list[dict], curre
         )
         raw_content = response.choices[0].message.content or ""
         payload = _extract_json_payload(raw_content)
+        payload["time_extracted"] = bool(payload.get("scheduled_time"))
+        if not payload.get("scheduled_time"):
+            deterministic_time = _extract_clear_relative_time(raw_prompt, current_time_ist)
+            if deterministic_time:
+                payload["scheduled_time"] = deterministic_time
+                payload["time_extracted"] = True
         return _normalize_result(payload, raw_prompt, user_name, contacts, direct_number)
     except Exception:
+        if campaign:
+            raise
         LOGGER.exception("DeepSeek agent processing failed, so deterministic fallback extraction is being used.")
+        deterministic_time = _extract_clear_relative_time(raw_prompt, current_time_ist)
+        if deterministic_time:
+            fallback_payload["scheduled_time"] = deterministic_time
+            fallback_payload["time_extracted"] = True
         return _normalize_result(fallback_payload, raw_prompt, user_name, contacts, direct_number)

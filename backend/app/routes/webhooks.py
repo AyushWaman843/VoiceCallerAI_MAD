@@ -1,13 +1,18 @@
+from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from ..database import get_db
 from ..models import CallJob
+from ..services.plans import settle
 from ..config import Config
+from ..services.exotel_service import map_exotel_status
+from ..services.live_audio import live_audio
 
 
 webhooks_bp = Blueprint("webhooks", __name__)
+GENERATED_AUDIO_DIR = Path(__file__).resolve().parents[2] / "generated_audio"
 
 
 def _extract_exotel_call_sid(payload: dict):
@@ -25,13 +30,7 @@ def _map_exotel_status(payload: dict) -> str:
         or payload.get("dial_call_status")
         or ""
     ).strip().lower()
-    if event_type == "answered":
-        return "connected"
-    if raw_status in {"completed", "answered", "in-progress", "in progress"}:
-        return "connected"
-    if raw_status in {"failed", "busy", "no-answer", "no answer", "canceled", "cancelled", "rejected"}:
-        return "failed"
-    return ""
+    return map_exotel_status(raw_status, event_type)
 
 
 def _normalize_phone_suffix(value: str) -> str:
@@ -56,6 +55,12 @@ def _canonicalize_audio_url(audio_url: str) -> str:
     if not filename:
         return normalized_audio_url
 
+    # Previously generated ElevenLabs MP3s are converted once and exposed under a new URL to avoid Exotel's cache.
+    if filename.lower().endswith(".mp3"):
+        converted_filename = f"{Path(filename).stem}.wav"
+        if (GENERATED_AUDIO_DIR / converted_filename).is_file():
+            filename = converted_filename
+
     # Rebuilding the public media URL keeps old rows playable after the Cloudflare tunnel changes.
     return f"{public_base_url}/media/{quote(filename)}"
 
@@ -74,6 +79,10 @@ def _resolve_audio_url_from_request() -> str:
         or request.args.get("phone")
         or ""
     )
+
+    cached_audio_url = live_audio(call_sid=call_sid or "", number=incoming_number_suffix, job_id=job_id)
+    if cached_audio_url:
+        return _canonicalize_audio_url(cached_audio_url)
 
     db_session = get_db()
     try:
@@ -137,7 +146,7 @@ def exotel_audio_url():
     current_app.logger.info("Exotel requested direct audio URL with args=%s, resolved_audio_url=%s", request.args.to_dict(), audio_url)
     if not audio_url:
         return jsonify({"status": "error", "message": "Unable to resolve an audio URL for this Exotel request."}), 404
-    response = Response(audio_url, status=200, mimetype="text/plain")
+    response = Response(audio_url, status=200, content_type="text/plain")
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -156,7 +165,7 @@ def exotel_webhook():
         current_app.logger.info("Exotel webhook fallback resolved audio URL %s for an empty GET request.", audio_url)
         if not audio_url:
             return jsonify({"status": "error", "message": "Unable to resolve an audio URL for this Exotel request."}), 404
-        response = Response(audio_url, status=200, mimetype="text/plain")
+        response = Response(audio_url, status=200, content_type="text/plain")
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -175,10 +184,14 @@ def exotel_webhook():
         if call_job is None:
             return jsonify({"status": "ignored", "message": "Matching call job not found."}), 200
 
+        if call_job.status in {"cancelled", "failed", "missed"} or (call_job.status == "connected" and mapped_status in {"failed", "missed"}):
+            return jsonify({"status": "ignored", "message": "Call already finalized."}), 200
         call_job.status = mapped_status
+        settle(db_session, call_job, mapped_status)
         db_session.commit()
     except Exception:
         db_session.rollback()
+        current_app.logger.exception("Failed to update Exotel status for call SID %s", call_sid)
         return jsonify({"status": "error", "message": "Failed to update Exotel call status."}), 500
     finally:
         db_session.close()

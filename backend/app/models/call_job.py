@@ -10,7 +10,7 @@ class CallJob(Base):
     __tablename__ = "call_jobs"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'calling', 'connected', 'failed', 'cancelled')",
+            "status IN ('pending', 'calling', 'connected', 'missed', 'failed', 'cancelled')",
             name="check_call_job_status",
         ),
     )
@@ -25,6 +25,9 @@ class CallJob(Base):
     scheduled_time = Column(DateTime(timezone=True), nullable=False)
     status = Column(String(20), nullable=False, default="pending")
     msg91_request_id = Column(String(255), nullable=True)
+    campaign_id = Column(String(36), nullable=True)
+    credit_state = Column(String(20), nullable=True)
+    credit_reservation_id = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=get_current_ist)
     updated_at = Column(
         DateTime(timezone=True),
@@ -45,6 +48,7 @@ class CallJob(Base):
             "scheduled_time": self.scheduled_time.isoformat(),
             "status": self.status,
             "msg91_request_id": self.msg91_request_id,
+            "campaign_id": self.campaign_id,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }

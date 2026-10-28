@@ -1,15 +1,21 @@
 from datetime import timedelta
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
-from flask import Blueprint, current_app, jsonify, request, send_from_directory
+from flask import Blueprint, current_app, g, jsonify, request, send_from_directory
 
 from ..database import get_db
-from ..models import CallJob
+from ..models import AudioPreview, CallJob
 from ..services.llm_service import normalize_indian_number, process_message
-from ..services.transcription_service import transcribe_audio
+from ..services.transcription_service import transcribe_audio, transcription_hints
 from ..services.tts_service import generate_audio
+from ..services.auth_service import require_user
+from .payments import PaymentError
+from .templates import resolve_template
+from ..services.plans import require_plan, reserve, settle
 from ..tasks.call_task import execute_call
 from ..utils.helpers import (
     ensure_ist_datetime,
@@ -35,6 +41,7 @@ class ScheduleCallRequest:
     confirmed_message: Optional[str] = None
     confirmed: bool = False
     agent_result: Optional[dict] = None
+    audio_preview_id: Optional[str] = None
 
     @classmethod
     def from_dict(cls, payload: dict):
@@ -67,6 +74,7 @@ class ScheduleCallRequest:
             ),
             confirmed=payload.get("confirmed") is True,
             agent_result=agent_result,
+            audio_preview_id=str(payload["audio_preview_id"]).strip() if payload.get("audio_preview_id") else None,
         )
 
 
@@ -92,16 +100,25 @@ def _build_spoken_message(user_name: str, contact_name: str, message: str) -> st
     return f"{prefix} {cleaned_message}{punctuation}"
 
 
-def _prepare_agent_result(schedule_request: ScheduleCallRequest, current_time_ist) -> dict:
-    if schedule_request.confirmed and schedule_request.agent_result:
+def _prepare_agent_result(schedule_request: ScheduleCallRequest, current_time_ist,
+                          timezone_name: str = "Asia/Kolkata") -> dict:
+    if schedule_request.agent_result and (schedule_request.confirmed or any((
+        schedule_request.chosen_time, schedule_request.confirmed_number,
+        schedule_request.confirmed_contact_name, schedule_request.confirmed_message))):
         agent_result = dict(schedule_request.agent_result)
     else:
+        with get_db() as db:
+            prompt, template_message = resolve_template(db, schedule_request.user_id, schedule_request.raw_prompt)
         agent_result = process_message(
-            raw_prompt=schedule_request.raw_prompt,
+            raw_prompt=prompt,
             user_name=schedule_request.user_name,
             contacts=schedule_request.contacts,
             current_time_ist=current_time_ist,
+            timezone_name=timezone_name,
         )
+        if template_message:
+            agent_result["message"] = template_message
+            agent_result["rephrased_message"] = _build_spoken_message(schedule_request.user_name, agent_result.get("contact_name", ""), template_message)
 
     if schedule_request.confirmed_contact_name:
         agent_result["contact_name"] = schedule_request.confirmed_contact_name
@@ -175,7 +192,6 @@ def _retry_existing_job(call_job: CallJob):
     call_job.scheduled_time = retried_time
     call_job.status = "pending"
     call_job.msg91_request_id = None
-    _schedule_job(call_job.id, retried_time)
     return retried_time
 
 
@@ -198,13 +214,14 @@ def health_check():
 
 
 @calls_bp.post("/transcribe-audio")
+@require_user
 def transcribe_audio_route():
     audio_file = request.files.get("audio")
     if audio_file is None:
         return jsonify({"status": "error", "message": "audio file is required."}), 400
 
     try:
-        transcribed_text = transcribe_audio(audio_file)
+        transcribed_text = transcribe_audio(audio_file, hotwords=transcription_hints(g.auth_user["id"]))
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
     except Exception:
@@ -214,17 +231,63 @@ def transcribe_audio_route():
     return jsonify({"status": "ok", "text": transcribed_text}), 200
 
 
+@calls_bp.post("/calls/preview-audio")
+@require_user
+def preview_call_audio():
+    value = request.get_json(silent=True)
+    message = value.get("message") if isinstance(value, dict) else None
+    if not isinstance(message, str) or not 1 <= len(message.strip()) <= 2000:
+        raise PaymentError("Enter a spoken message of up to 2000 characters.")
+    message = message.strip()
+    with get_db() as db:
+        account = require_plan(db, g.auth_user["id"])
+        if account.credits_available < 1:
+            raise PaymentError("Add test credits before previewing a call.", 409)
+        existing = db.query(AudioPreview).filter_by(user_id=g.auth_user["id"], message=message).filter(
+            AudioPreview.expires_at > get_current_ist()).order_by(AudioPreview.created_at.desc()).first()
+        if existing:
+            return jsonify(preview_id=existing.id, audio_url=existing.audio_url)
+        recent = db.query(AudioPreview).filter_by(user_id=g.auth_user["id"]).filter(
+            AudioPreview.created_at > get_current_ist() - timedelta(hours=1)).count()
+        if recent >= 10:
+            raise PaymentError("You've reached the hourly audio preview limit. Try again later.", 429)
+    try:
+        audio_url = generate_audio(message)
+    except Exception:
+        current_app.logger.exception("Personal audio preview failed")
+        raise PaymentError("Unable to generate the audio preview right now.", 502) from None
+    if not _is_public_url(audio_url):
+        raise PaymentError("Set PUBLIC_BASE_URL to a reachable public HTTPS backend before previewing audio.", 503)
+    with get_db() as db:
+        preview = AudioPreview(user_id=g.auth_user["id"], message=message, audio_url=audio_url,
+                               expires_at=get_current_ist() + timedelta(minutes=30))
+        db.add(preview)
+        db.commit()
+        return jsonify(preview_id=preview.id, audio_url=preview.audio_url), 201
+
+
 @calls_bp.post("/schedule-call")
+@require_user
 def schedule_call():
     payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify(status="error", message="Provide call details as a JSON object."), 400
+    # Ownership comes only from the verified session, never the request body.
+    payload = {**payload, "user_id": g.auth_user["id"], "user_name": g.auth_user["full_name"]}
     try:
         schedule_request = ScheduleCallRequest.from_dict(payload)
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
 
-    current_time_ist = get_current_ist()
+    with get_db() as plan_db:
+        account = require_plan(plan_db, g.auth_user["id"])
+        if account.credits_available < 1:
+            raise PaymentError("Not enough test credits. Add a pack before preparing a call.", 409)
+        timezone_name = account.timezone
+        plan_db.commit()
+    current_time_ist = get_current_ist().astimezone(ZoneInfo(timezone_name))
     try:
-        agent_result = _prepare_agent_result(schedule_request, current_time_ist)
+        agent_result = _prepare_agent_result(schedule_request, current_time_ist, timezone_name)
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
 
@@ -250,31 +313,28 @@ def schedule_call():
 
     message_preview = agent_result["rephrased_message"]
 
-    try:
-        # Pre-generating audio at scheduling time makes the later Exotel call much more reliable.
-        audio_url = generate_audio(message_preview)
-    except Exception:
-        current_app.logger.exception("Failed to generate hosted audio during schedule-call.")
-        return jsonify({"status": "error", "message": "Unable to generate the call audio right now."}), 502
+    # Check the server-owned balance before ElevenLabs consumes any tokens.
+    with get_db() as balance_db:
+        account = require_plan(balance_db, g.auth_user["id"])
+        if account.credits_available < 1:
+            return jsonify(status="error", message="Not enough test credits."), 409
 
-    if not _is_public_url(audio_url):
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": "Audio was generated locally, but PUBLIC_BASE_URL is not configured for a public hosted file URL.",
-                }
-            ),
-            500,
-        )
->>>>>>> 3d09e36eaba80001a4c044da46a61ee0af826754
-
-    try:
-        # Pre-generating audio at scheduling time makes the later Exotel call much more reliable.
-        audio_url = generate_audio(message_preview)
-    except Exception:
-        current_app.logger.exception("Failed to generate hosted audio during schedule-call.")
-        return jsonify({"status": "error", "message": "Unable to generate the call audio right now."}), 502
+    audio_url = None
+    if schedule_request.audio_preview_id:
+        with get_db() as preview_db:
+            preview = preview_db.query(AudioPreview).filter_by(id=schedule_request.audio_preview_id,
+                user_id=g.auth_user["id"], message=message_preview).filter(
+                AudioPreview.expires_at > get_current_ist()).first()
+            if not preview:
+                raise PaymentError("Audio preview expired or the message changed. Preview it again.", 409)
+            audio_url = preview.audio_url
+    else:
+        try:
+            # Pre-generating audio at scheduling time makes the later Exotel call much more reliable.
+            audio_url = generate_audio(message_preview)
+        except Exception:
+            current_app.logger.exception("Failed to generate hosted audio during schedule-call.")
+            return jsonify({"status": "error", "message": "Unable to generate the call audio right now."}), 502
 
     if not _is_public_url(audio_url):
         return (
@@ -288,8 +348,10 @@ def schedule_call():
         )
 
     db_session = get_db()
+    scheduled_job_id = None
     try:
         call_job = CallJob(
+            id=str(uuid.uuid4()),
             user_id=schedule_request.user_id,
             contact_name=agent_result["contact_name"],
             contact_number=agent_result["contact_number"],
@@ -298,13 +360,28 @@ def schedule_call():
             audio_url=audio_url,
             scheduled_time=scheduled_time,
             status="pending",
+            credit_state="reserved",
         )
+        call_job.credit_reservation_id = call_job.id
+        account = require_plan(db_session, schedule_request.user_id)
+        reserve(db_session, account, call_job.id)
         db_session.add(call_job)
-        db_session.commit()
-        db_session.refresh(call_job)
         _schedule_job(call_job.id, scheduled_time)
+        scheduled_job_id = call_job.id
+        db_session.commit()
+    except PaymentError as exc:
+        db_session.rollback()
+        if scheduled_job_id:
+            scheduler = current_app.extensions.get("scheduler")
+            if scheduler and scheduler.get_job(scheduled_job_id):
+                scheduler.remove_job(scheduled_job_id)
+        return jsonify(status="error", message=exc.message), exc.status
     except Exception:
         db_session.rollback()
+        if scheduled_job_id:
+            scheduler = current_app.extensions.get("scheduler")
+            if scheduler and scheduler.get_job(scheduled_job_id):
+                scheduler.remove_job(scheduled_job_id)
         current_app.logger.exception("Failed to save and schedule a call job.")
         return jsonify({"status": "error", "message": "Unable to schedule the call right now."}), 500
     finally:
@@ -314,7 +391,7 @@ def schedule_call():
         jsonify(
             {
                 "status": "scheduled",
-                "job_id": call_job.id,
+                "job_id": scheduled_job_id,
                 "call_time": scheduled_time.isoformat(),
                 "contact_name": agent_result["contact_name"],
                 "contact_number": agent_result["contact_number"],
@@ -329,10 +406,9 @@ def schedule_call():
 
 
 @calls_bp.get("/calls")
+@require_user
 def get_calls():
-    user_id = str(request.args.get("user_id", "")).strip()
-    if not user_id:
-        return jsonify({"status": "error", "message": "user_id query parameter is required."}), 400
+    user_id = g.auth_user["id"]
 
     db_session = get_db()
     try:
@@ -351,10 +427,11 @@ def get_calls():
 
 
 @calls_bp.delete("/calls/<job_id>")
+@require_user
 def cancel_call(job_id: str):
     db_session = get_db()
     try:
-        call_job = db_session.query(CallJob).filter(CallJob.id == job_id).first()
+        call_job = db_session.query(CallJob).filter(CallJob.id == job_id, CallJob.user_id == g.auth_user["id"]).first()
         if call_job is None:
             return jsonify({"status": "error", "message": "Call job not found."}), 404
         if call_job.status != "pending":
@@ -365,6 +442,7 @@ def cancel_call(job_id: str):
             scheduler.remove_job(job_id)
 
         call_job.status = "cancelled"
+        settle(db_session, call_job, "cancelled")
         db_session.commit()
     except Exception:
         db_session.rollback()
@@ -377,22 +455,45 @@ def cancel_call(job_id: str):
 
 
 @calls_bp.post("/calls/<job_id>/retry")
+@require_user
 def retry_call(job_id: str):
     db_session = get_db()
+    scheduled_job_id = None
     try:
-        call_job = db_session.query(CallJob).filter(CallJob.id == job_id).first()
+        call_job = db_session.query(CallJob).filter(CallJob.id == job_id, CallJob.user_id == g.auth_user["id"]).first()
         if call_job is None:
             return jsonify({"status": "error", "message": "Call job not found."}), 404
-        if call_job.status not in {"failed", "cancelled"}:
-            return jsonify({"status": "error", "message": "Only failed or cancelled calls can be retried."}), 400
+        if call_job.status not in {"failed", "missed", "cancelled"}:
+            return jsonify({"status": "error", "message": "Only failed, missed, or cancelled calls can be retried."}), 400
 
         retried_time = _retry_existing_job(call_job)
+        account = require_plan(db_session, g.auth_user["id"])
+        call_job.credit_reservation_id = str(uuid.uuid4())
+        reserve(db_session, account, call_job.credit_reservation_id)
+        call_job.credit_state = "reserved"
+        _schedule_job(call_job.id, retried_time)
+        scheduled_job_id = call_job.id
         db_session.commit()
+    except PaymentError as exc:
+        db_session.rollback()
+        if scheduled_job_id:
+            scheduler = current_app.extensions.get("scheduler")
+            if scheduler and scheduler.get_job(scheduled_job_id):
+                scheduler.remove_job(scheduled_job_id)
+        return jsonify(status="error", message=exc.message), exc.status
     except ValueError as exc:
         db_session.rollback()
+        if scheduled_job_id:
+            scheduler = current_app.extensions.get("scheduler")
+            if scheduler and scheduler.get_job(scheduled_job_id):
+                scheduler.remove_job(scheduled_job_id)
         return jsonify({"status": "error", "message": str(exc)}), 400
     except Exception:
         db_session.rollback()
+        if scheduled_job_id:
+            scheduler = current_app.extensions.get("scheduler")
+            if scheduler and scheduler.get_job(scheduled_job_id):
+                scheduler.remove_job(scheduled_job_id)
         current_app.logger.exception("Failed to retry call job %s.", job_id)
         return jsonify({"status": "error", "message": "Unable to retry the call right now."}), 500
     finally:

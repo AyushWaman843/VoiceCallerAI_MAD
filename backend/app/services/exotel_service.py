@@ -10,6 +10,19 @@ from ..config import Config
 LOGGER = logging.getLogger(__name__)
 
 
+def map_exotel_status(raw_status: str, event_type: str = "") -> str:
+    status = str(raw_status or "").strip().lower()
+    if str(event_type or "").strip().lower() == "answered":
+        return "connected"
+    if status in {"completed", "answered", "in-progress", "in progress"}:
+        return "connected"
+    if status in {"busy", "no-answer", "no answer"}:
+        return "missed"
+    if status in {"failed", "canceled", "cancelled", "rejected"}:
+        return "failed"
+    return ""
+
+
 def _normalized_public_base_url() -> str:
     public_base_url = Config.PUBLIC_BASE_URL.strip().rstrip("/")
     if not public_base_url:
@@ -63,6 +76,22 @@ def _extract_call_sid(response: requests.Response) -> str:
     raise ValueError(f"Exotel response did not include a call sid: {response.text}")
 
 
+def get_call_status(call_sid: str) -> str:
+    response = requests.get(
+        f"https://{Config.EXOTEL_BASE_URL}/v1/Accounts/{Config.EXOTEL_ACCOUNT_SID}/Calls/{call_sid}.json",
+        auth=(Config.EXOTEL_API_KEY, Config.EXOTEL_API_TOKEN), timeout=10,
+    )
+    response.raise_for_status()
+    return str(response.json().get("Call", {}).get("Status", "")).strip().lower()
+
+
+def _require_public_audio(audio_url: str) -> None:
+    base_url = _normalized_public_base_url()
+    for url in (f"{base_url}/health", audio_url):
+        with requests.get(url, stream=True, timeout=8) as response:
+            response.raise_for_status()
+
+
 def place_call(contact_number: str, audio_url: str) -> str:
     if not all(
         [
@@ -80,6 +109,8 @@ def place_call(contact_number: str, audio_url: str) -> str:
     normalized_audio_url = str(audio_url or "").strip()
     if not normalized_audio_url.startswith(("http://", "https://")):
         raise ValueError("audio_url must be a public HTTP or HTTPS URL before Exotel can play it.")
+
+    _require_public_audio(normalized_audio_url)
 
     flow_url = _build_flow_url()
     normalized_contact_number = _normalize_customer_number(contact_number)

@@ -16,6 +16,12 @@ def _normalize_database_url(database_url: str) -> str:
 
 
 class Config:
+    PLAN_CATALOG_JSON = os.getenv("PLAN_CATALOG_JSON", "")
+    EXOTEL_ESTIMATED_COST_PAISE = os.getenv("EXOTEL_ESTIMATED_COST_PAISE", "")
+    RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+    RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+    SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+    SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
     TRANSCRIPTION_PROVIDER = os.getenv("TRANSCRIPTION_PROVIDER", "local")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
