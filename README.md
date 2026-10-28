@@ -1,40 +1,13 @@
-# VoiceCaller AI
+# Voxie
 
-An Android app that lets you schedule automated AI-generated voice calls to your contacts using natural language.
+Voxie schedules one-way AI voice calls from an Android app. Personal users call individual contacts. Business users also save groups, review CSV or Google Sheets imports, and schedule one outbound job per eligible recipient.
 
-## How It Works
-1. User types: "Remind Rahul about the meeting tomorrow at 6pm"
-2. DeepSeek LLM extracts: recipient, message, scheduled time
-3. ElevenLabs generates voice audio from the rephrased message
-4. MSG91 places the automated call at the scheduled time
-5. Call status is sent back via webhook and shown in the app
+Supabase handles email accounts; Flask owns plan checks, test credits, contacts, campaign scheduling, and authenticated APIs. DeepSeek prepares a message and time, ElevenLabs creates hosted audio, APScheduler triggers Exotel's outbound flow, and Exotel callbacks update call status. Calls play a prepared message and end; they are not conversational.
 
-## Project Structure
-```
-voicecaller-project/
-├── backend/              # Flask backend (Python)
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── config.py
-│   │   ├── database.py
-│   │   ├── models/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   ├── tasks/
-│   │   └── utils/
-│   ├── .env              # Your API keys (never commit)
-│   ├── .env.example      # Template
-│   ├── requirements.txt
-│   └── run.py
-├── android/              # Kotlin Android app
-├── .codex/               # Codex AI instructions
-└── docs/                 # API references and notes
-```
+## Local development
 
-## Docs
-- [Setup Guide](docs/setup.md)
-- [API Reference](docs/api.md)
-- [Tech Stack Decisions](docs/decisions.md)
+1. Copy `backend/.env.example` to `backend/.env` and fill in the existing Supabase, DeepSeek, ElevenLabs, Exotel, and Razorpay **test** credentials. Set `PUBLIC_BASE_URL` to a reachable HTTPS backend before generating call audio.
+2. From `backend`, run `.\.venv\Scripts\python.exe run.py`. Startup creates the new tables and adds the required call columns. The equivalent PostgreSQL migration is in `backend/migrations/003_plans_groups_campaigns.sql`.
+3. From `android`, run `.\gradlew.bat :app:assembleDebug`, then install/run from Android Studio. Configure the backend Wi-Fi address in app connection settings for a physical phone.
 
-## Dev Setup
-See [docs/setup.md](docs/setup.md)
+For pricing, credit rules, Business setup, Google Sheets OAuth, and test limitations, see [Voxie plans and Business MVP](docs/voxie-plans-business.md). API routes are in [docs/api.md](docs/api.md), and Razorpay checkout setup is in [docs/razorpay-test.md](docs/razorpay-test.md).
