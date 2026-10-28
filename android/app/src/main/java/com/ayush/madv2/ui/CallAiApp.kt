@@ -1,1993 +1,516 @@
 package com.ayush.madv2.ui
 
+import com.ayush.madv2.ui.components.VoxieButton as Button
+import com.ayush.madv2.ui.components.VoxieOutlinedButton as OutlinedButton
+import com.ayush.madv2.ui.components.VoxieTextButton as TextButton
+
 import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.MediaRecorder
-import android.provider.ContactsContract
-import androidx.annotation.DrawableRes
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import com.ayush.madv2.R
-import com.ayush.madv2.ui.theme.AppAccent
-import com.ayush.madv2.ui.theme.AppAccentSoft
-import com.ayush.madv2.ui.theme.AppBackground
-import com.ayush.madv2.ui.theme.AppDanger
-import com.ayush.madv2.ui.theme.AppDangerSoft
-import com.ayush.madv2.ui.theme.AppLine
-import com.ayush.madv2.ui.theme.AppMuted
-import com.ayush.madv2.ui.theme.AppPanel
-import com.ayush.madv2.ui.theme.AppPanelAlt
-import com.ayush.madv2.ui.theme.AppText
+import com.ayush.madv2.data.AccountSession
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ayush.madv2.ui.components.*
+import com.ayush.madv2.ui.screens.*
 import com.ayush.madv2.ui.theme.MADv2Theme
-import java.io.File
-import java.time.OffsetDateTime
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
+import com.ayush.madv2.ui.theme.PocketMotion
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
-import kotlin.math.sin
+import java.time.format.DateTimeFormatter
 
-enum class AppTab {
-    Home,
-    Scheduled,
-    Contacts,
-}
+enum class AppTab { Home, Scheduled, Contacts }
+private enum class Destination { Home, Request, Upcoming, History, Calendar, Contacts, Groups, Settings, Credits, Templates }
 
-private const val CONTACTS_PREVIEW_COUNT = 10
-
-data class QuickAction(
-    val title: String,
-    val prompt: String,
-)
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CallAiApp(
-    callAiViewModel: CallAiViewModel = viewModel(),
-) {
-    val uiState by callAiViewModel.uiState.collectAsState()
-    val quickActions = remember {
-        listOf(
-            QuickAction(
-                title = "Call someone",
-                prompt = "Call Ayush and tell him he owes me 50 rupees tomorrow at 3pm",
-            ),
-            QuickAction(
-                title = "Schedule a call",
-                prompt = "Call Rahul after 2 hours and ask him about the project update",
-            ),
-            QuickAction(
-                title = "Follow up with...",
-                prompt = "Call 8879279251 tomorrow at 9am and tell him the meeting is confirmed",
-            ),
-        )
-    }
-
-    CallAiAppContent(
-        uiState = uiState,
-        quickActions = quickActions,
-        onSelectTab = callAiViewModel::selectTab,
-        onToggleSettings = callAiViewModel::toggleSettings,
-        onOpenHomeSettings = callAiViewModel::openHomeSettings,
-        onPromptChange = callAiViewModel::setPrompt,
-        onSubmitPrompt = callAiViewModel::submitPrompt,
-        onConfirmSchedule = callAiViewModel::confirmSchedule,
-        onQuickActionClick = callAiViewModel::useQuickPrompt,
-        onUserNameChange = callAiViewModel::setUserName,
-        onUserIdChange = callAiViewModel::setUserId,
-        onBackendBaseUrlChange = callAiViewModel::setBackendBaseUrl,
-        onSetContacts = callAiViewModel::setContacts,
-        onSetRecording = callAiViewModel::setRecording,
-        onTranscribeAudio = callAiViewModel::transcribeAudio,
-        onShowError = callAiViewModel::showError,
-        onMissingFieldChange = callAiViewModel::updateMissingField,
-        onRefreshCalls = callAiViewModel::refreshCalls,
-        onCancelCall = callAiViewModel::cancelCall,
-        onClearMessages = callAiViewModel::clearMessages,
-    )
-}
-
-@Composable
-private fun CallAiAppContent(
-    uiState: CallAiUiState,
-    quickActions: List<QuickAction>,
-    onSelectTab: (AppTab) -> Unit,
-    onToggleSettings: () -> Unit,
-    onOpenHomeSettings: () -> Unit,
-    onPromptChange: (String) -> Unit,
-    onSubmitPrompt: () -> Unit,
-    onConfirmSchedule: () -> Unit,
-    onQuickActionClick: (String) -> Unit,
-    onUserNameChange: (String) -> Unit,
-    onUserIdChange: (String) -> Unit,
-    onBackendBaseUrlChange: (String) -> Unit,
-    onSetContacts: (List<ContactDraft>) -> Unit,
-    onSetRecording: (Boolean) -> Unit,
-    onTranscribeAudio: (File) -> Unit,
-    onShowError: (String) -> Unit,
-    onMissingFieldChange: (String, String) -> Unit,
-    onRefreshCalls: () -> Unit,
-    onCancelCall: (String) -> Unit,
-    onClearMessages: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppBackground),
-        color = AppBackground,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-        ) {
-            when (uiState.selectedTab) {
-                AppTab.Home -> {
-                    HomeTab(
-                        uiState = uiState,
-                        quickActions = quickActions,
-                        onToggleSettings = onToggleSettings,
-                        onPromptChange = onPromptChange,
-                        onSubmitPrompt = onSubmitPrompt,
-                        onConfirmSchedule = onConfirmSchedule,
-                        onQuickActionClick = onQuickActionClick,
-                        onUserNameChange = onUserNameChange,
-                        onUserIdChange = onUserIdChange,
-                        onBackendBaseUrlChange = onBackendBaseUrlChange,
-                        onSetContacts = onSetContacts,
-                        onSetRecording = onSetRecording,
-                        onTranscribeAudio = onTranscribeAudio,
-                        onShowError = onShowError,
-                        onMissingFieldChange = onMissingFieldChange,
-                        onClearMessages = onClearMessages,
-                    )
-                }
-
-                AppTab.Scheduled -> {
-                    ScheduledTab(
-                        uiState = uiState,
-                        onRefreshCalls = onRefreshCalls,
-                        onCancelCall = onCancelCall,
-                    )
-                }
-
-                AppTab.Contacts -> {
-                    ContactsTab(
-                        uiState = uiState,
-                        onOpenSettings = onOpenHomeSettings,
-                        onSetContacts = onSetContacts,
-                        onShowError = onShowError,
-                    )
-                }
-            }
-
-            BottomNavigationBar(
-                selectedTab = uiState.selectedTab,
-                onTabSelected = onSelectTab,
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
-        }
-    }
-}
-
-@Composable
-private fun HomeTab(
-    uiState: CallAiUiState,
-    quickActions: List<QuickAction>,
-    onToggleSettings: () -> Unit,
-    onPromptChange: (String) -> Unit,
-    onSubmitPrompt: () -> Unit,
-    onConfirmSchedule: () -> Unit,
-    onQuickActionClick: (String) -> Unit,
-    onUserNameChange: (String) -> Unit,
-    onUserIdChange: (String) -> Unit,
-    onBackendBaseUrlChange: (String) -> Unit,
-    onSetContacts: (List<ContactDraft>) -> Unit,
-    onSetRecording: (Boolean) -> Unit,
-    onTranscribeAudio: (File) -> Unit,
-    onShowError: (String) -> Unit,
-    onMissingFieldChange: (String, String) -> Unit,
-    onClearMessages: () -> Unit,
-) {
+fun CallAiApp(callAiViewModel: CallAiViewModel = viewModel(), onSignOut: () -> Unit = {},
+              onBackendChanged: (String) -> Unit = {}, mode: String = "personal",
+              onCredits: () -> Unit = {}, business: BusinessViewModel = viewModel(),
+              profile: ProfileViewModel = viewModel()) {
+    val state by callAiViewModel.uiState.collectAsStateWithLifecycle()
+    val account by AccountSession.account.collectAsStateWithLifecycle()
+    val profileState by profile.state.collectAsStateWithLifecycle()
+    val businessState by business.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val contactsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            onSetContacts(loadPhoneContacts(context))
-        } else {
-            onShowError("Contacts permission is needed to match people from your phonebook.")
-        }
-    }
-    val recordAudioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) {
-            onShowError("Microphone permission is needed for voice prompts.")
-        }
-    }
-    val hasContactsPermission = hasPermission(context, Manifest.permission.READ_CONTACTS)
-    var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
-    var recordingFile by remember { mutableStateOf<File?>(null) }
+    val preferences = remember { context.getSharedPreferences("pocketcall_preferences", Context.MODE_PRIVATE) }
+    val confirmationKey = "confirm_calls_${account?.user?.id ?: "signed_out"}"
+    var confirmationRequired by remember(confirmationKey) { mutableStateOf(preferences.getBoolean(confirmationKey, true)) }
+    var theme by remember { mutableStateOf(preferences.getString("theme", "System") ?: "System") }
+    val dark = theme == "Dark" || (theme == "System" && isSystemInDarkTheme())
+    var destination by rememberSaveable { mutableStateOf(Destination.Home) }
+    var focusRequest by remember { mutableStateOf(false) }
+    var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.Overview) }
+    val homeFocus = remember { FocusRequester() }
+    var contactPicker by remember { mutableStateOf(false) }
+    var sheetGroup by remember { mutableStateOf<String?>(null) }
+    var pendingCampaignGroup by remember { mutableStateOf<String?>(null) }
+    var pendingCampaignPrompt by remember { mutableStateOf("") }
+    var addPromptItem by remember { mutableStateOf(false) }
+    var templatePickerOnly by remember { mutableStateOf(false) }
+    var attachedGroup by remember(account?.user?.id) { mutableStateOf<BusinessGroup?>(null) }
+    var attachedTemplate by remember(account?.user?.id) { mutableStateOf<MessageTemplate?>(null) }
+    var selectedCall by remember { mutableStateOf<ScheduledCallUiModel?>(null) }
+    var selectedContact by remember { mutableStateOf<ContactDraft?>(null) }
+    var contactsGranted by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) }
+    var loadingContacts by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    val density = LocalDensity.current
+    val imeOverlap = (WindowInsets.ime.getBottom(density) - WindowInsets.navigationBars.getBottom(density)).coerceAtLeast(0)
+    val bottomBarClearance = (68.dp - with(density) { imeOverlap.toDp() }).coerceAtLeast(0.dp)
+    val haptics = rememberPocketHaptics()
+    val capture = rememberVoiceCapture { callAiViewModel.setRecording(false) }
+    val screenStates = rememberSaveableStateHolder()
 
-    LaunchedEffect(hasContactsPermission) {
-        if (hasContactsPermission && uiState.contacts.isEmpty()) {
-            onSetContacts(loadPhoneContacts(context))
+    fun syncContacts() {
+        if (loadingContacts) return
+        scope.launch {
+            loadingContacts = true
+            runCatching { withContext(Dispatchers.IO) { loadPhoneContacts(context) } }
+                .onSuccess(callAiViewModel::setContacts)
+                .onFailure { callAiViewModel.showError("Couldn't read your contacts. Check PocketCall's contact permission.") }
+            loadingContacts = false
         }
     }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            recorder?.runCatching {
-                reset()
-                release()
-            }
-            recordingFile?.delete()
+    val contactsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        contactsGranted = granted
+        if (granted) syncContacts()
+        else {
+            callAiViewModel.setContacts(emptyList())
+            callAiViewModel.showError("Contacts access is off. You can still enter a phone number in your message.")
         }
     }
-
-    fun stopRecordingAndTranscribe() {
-        val activeRecorder = recorder
-        val audioFile = recordingFile
-        recorder = null
-        recordingFile = null
-        onSetRecording(false)
-        if (activeRecorder == null || audioFile == null) {
-            onShowError("No voice recording was captured.")
-            return
-        }
-        runCatching {
-            activeRecorder.stop()
-            activeRecorder.reset()
-            activeRecorder.release()
-        }.onSuccess {
-            onTranscribeAudio(audioFile)
-        }.onFailure {
-            audioFile.delete()
-            onShowError("Could not finish the recording. Please try again.")
-        }
-    }
-
     fun startRecording() {
-        runCatching {
-            val (newRecorder, newFile) = createVoiceRecorder(context)
-            recorder = newRecorder
-            recordingFile = newFile
-            onSetRecording(true)
-        }.onFailure {
-            recordingFile?.delete()
-            recorder = null
-            recordingFile = null
-            onSetRecording(false)
-            onShowError("Could not start recording from the microphone.")
+        keyboard?.hide()
+        focus.clearFocus()
+        runCatching { capture.start() }
+            .onSuccess { callAiViewModel.setRecording(true) }
+            .onFailure { callAiViewModel.showError("Couldn't start the microphone. Please try again.") }
+    }
+    val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startRecording()
+        else callAiViewModel.showError("Allow microphone access in your phone's app settings to record a message.")
+    }
+    fun recordVoice() {
+        destination = Destination.Request
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+            startRecording()
+        else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    fun submitHomePrompt(prompt: String = state.prompt.trim()) {
+        if (prompt.isBlank() || state.isProcessing || businessState.busy) return
+        callAiViewModel.beginNewRequest()
+        destination = Destination.Request
+        fun submitIndividual() {
+            attachedTemplate?.let { callAiViewModel.setPrompt("Use template \"${it.name}\" to $prompt") }
+            callAiViewModel.submitPrompt()
+        }
+        if (mode == "business") {
+            if (attachedGroup != null) business.selectGroup(attachedGroup!!, prompt)
+            else business.resolvePrompt(prompt, attachedTemplate?.id) {
+                submitIndividual()
+            }
+        } else {
+            submitIndividual()
         }
     }
-
-    val currentHour = ZonedDateTime.now(ZoneId.of("Asia/Kolkata")).hour
-    val greeting = when {
-        currentHour < 12 -> "Good morning,"
-        currentHour < 17 -> "Good afternoon,"
-        else -> "Good evening,"
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 18.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                SmallCircleButton(
-                    onClick = onToggleSettings,
-                    containerColor = Color.White,
-                    label = "+",
-                    contentColor = AppMuted,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(52.dp))
-
-            WelcomeHeader(
-                greeting = greeting,
-                userName = uiState.userName.ifBlank { "Ayush" },
-            )
-            Text(
-                text = "What would you like me to call?",
-                modifier = Modifier.padding(top = 18.dp),
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 16.sp,
-                    lineHeight = 21.sp,
-                    textAlign = TextAlign.Center,
-                ),
-                color = AppMuted,
-            )
-
-            PromptComposer(
-                prompt = uiState.prompt,
-                onPromptChange = onPromptChange,
-                onSubmitPrompt = onSubmitPrompt,
-                onMicClick = {
-                    if (uiState.isRecording) {
-                        stopRecordingAndTranscribe()
-                    } else if (!hasPermission(context, Manifest.permission.RECORD_AUDIO)) {
-                        recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    } else {
-                        startRecording()
-                    }
-                },
-                isProcessing = uiState.isProcessing,
-                isRecording = uiState.isRecording,
-                processingMessage = uiState.processingMessage,
-                modifier = Modifier.padding(top = 48.dp),
-            )
-
-            if (!hasContactsPermission) {
-                ActionPill(
-                    label = "Allow contacts access",
-                    onClick = { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
-                )
-            } else if (uiState.contacts.isNotEmpty()) {
-                Text(
-                    text = "Using ${uiState.contacts.size} phone contacts for matching.",
-                    modifier = Modifier.padding(top = 18.dp),
-                    color = AppMuted,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        textAlign = TextAlign.Center,
-                    ),
-                )
-            }
-
-            if (uiState.errorMessage != null || uiState.infoMessage != null) {
-                MessageBanner(
-                    message = uiState.errorMessage ?: uiState.infoMessage.orEmpty(),
-                    isError = uiState.errorMessage != null,
-                    modifier = Modifier.padding(top = 16.dp),
-                    onDismiss = onClearMessages,
-                )
-            }
-
-            AnimatedVisibility(
-                visible = uiState.isProcessing && !isInlineComposerState(uiState.processingMessage),
-                modifier = Modifier.padding(top = 20.dp),
-            ) {
-                ProcessingCard(
-                    headline = "Thinking through your call",
-                    detail = when {
-                        !uiState.processingMessage.isNullOrBlank() -> uiState.processingMessage
-                        else -> "Matching the contact, finding the time, and preparing the spoken message."
-                    },
-                )
-            }
-
-            AnimatedVisibility(
-                visible = uiState.missingFieldsDraft != null,
-                modifier = Modifier.padding(top = 20.dp),
-            ) {
-                uiState.missingFieldsDraft?.let { draft ->
-                    MissingFieldsCard(
-                        draft = draft,
-                        onFieldChange = onMissingFieldChange,
-                        onContinue = onSubmitPrompt,
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = uiState.confirmationDraft != null,
-                modifier = Modifier.padding(top = 20.dp),
-            ) {
-                uiState.confirmationDraft?.let { draft ->
-                    ConfirmationCard(
-                        draft = draft,
-                        onConfirm = onConfirmSchedule,
-                    )
-                }
-            }
-
-            Text(
-                text = "Try: \"Call John tomorrow at 4 PM and tell him he sucks.\"",
-                modifier = Modifier.padding(top = 18.dp),
-                color = AppMuted,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    textAlign = TextAlign.Center,
-                ),
-            )
-
-            FlowActions(
-                quickActions = quickActions,
-                onQuickActionClick = onQuickActionClick,
-                modifier = Modifier.padding(top = 20.dp),
-            )
-
-            DebugCard(
-                feedbackJson = uiState.feedbackJson,
-                modifier = Modifier.padding(top = 20.dp),
-            )
-
-            Spacer(modifier = Modifier.height(128.dp))
+    fun finishVoice() {
+        val audio = capture.finish()
+        callAiViewModel.setRecording(false)
+        if (audio != null) {
+            destination = Destination.Request
+            callAiViewModel.transcribeAudio(audio, onReady = {
+                if (mode == "business" && state.missingFieldsDraft == null) submitHomePrompt(it)
+                else callAiViewModel.submitPrompt()
+            })
         }
-
-        AnimatedVisibility(
-            visible = uiState.showSettings,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 52.dp)
-        ) {
-            SettingsCard(
-                backendBaseUrl = uiState.backendBaseUrl,
-                userId = uiState.userId,
-                userName = uiState.userName,
-                onBackendBaseUrlChange = onBackendBaseUrlChange,
-                onUserIdChange = onUserIdChange,
-                onUserNameChange = onUserNameChange,
-            )
+        else callAiViewModel.showError("That recording was too short. Please try again.")
+    }
+    LaunchedEffect(state.conversation.size) {
+        // Transcription submits through the existing agent; reveal its conversation when ready.
+        if (destination == Destination.Home && state.conversation.isNotEmpty()) destination = Destination.Request
+    }
+    LaunchedEffect(businessState.error) {
+        if (businessState.selection == null && destination in listOf(Destination.Home, Destination.Request))
+            businessState.error?.let(callAiViewModel::showError)
+    }
+    LaunchedEffect(businessState.completedCampaign?.id) {
+        businessState.completedCampaign?.let { completed ->
+            callAiViewModel.campaignScheduled(completed.recipients.map { it.name })
+            attachedGroup = null
+            attachedTemplate = null
+            business.acknowledgeScheduled()
+            profile.refresh()
         }
     }
-}
-
-@Composable
-private fun PromptComposer(
-    prompt: String,
-    onPromptChange: (String) -> Unit,
-    onSubmitPrompt: () -> Unit,
-    onMicClick: () -> Unit,
-    isProcessing: Boolean,
-    isRecording: Boolean,
-    processingMessage: String?,
-    modifier: Modifier = Modifier,
-) {
-    val inlineMessage = when {
-        isRecording -> "Listening for your prompt"
-        isInlineComposerState(processingMessage) -> processingMessage.orEmpty()
-        else -> ""
+    fun requestContacts() {
+        contactsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+        if (contactsGranted) syncContacts() else contactsPermission.launch(Manifest.permission.READ_CONTACTS)
+    }
+    fun newCall() {
+        if (state.isProcessing || capture.recording) return
+        focusRequest = false
+        attachedGroup = null
+        attachedTemplate = null
+        callAiViewModel.newConversation()
+        destination = Destination.Request
+    }
+    fun chooseContact(contact: ContactDraft) {
+        if (state.missingFieldsDraft != null) {
+            callAiViewModel.updateMissingField("contact_name", contact.name)
+            callAiViewModel.updateMissingField("contact_number", contact.number)
+        } else {
+            val existing = state.prompt.trim()
+            callAiViewModel.setPrompt("Call ${contact.name} at ${contact.number}" +
+                if (existing.isEmpty()) " and " else ". $existing")
+        }
+        selectedContact = null
+        contactPicker = false
+        destination = Destination.Request
     }
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 6.dp,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 18.dp, top = 12.dp, end = 14.dp, bottom = 12.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BasicTextField(
-                    value = prompt,
-                    onValueChange = onPromptChange,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 12.dp),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        color = AppText,
-                        fontSize = 16.sp,
-                        lineHeight = 20.sp,
-                    ),
-                    maxLines = 3,
-                    decorationBox = { innerTextField ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 26.dp),
-                            contentAlignment = Alignment.CenterStart,
-                        ) {
-                            if (prompt.isBlank()) {
-                                Text(
-                                    text = "Tell me who to call and what to say...",
-                                    color = Color(0xFFA694B8),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.sp,
-                                        lineHeight = 20.sp,
-                                    ),
-                                )
+    LaunchedEffect(Unit) {
+        profile.refresh()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        contactsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+        if (contactsGranted) syncContacts() else callAiViewModel.setContacts(emptyList())
+    }
+    LaunchedEffect(callAiViewModel, haptics) {
+        var previous = callAiViewModel.uiState.value
+        callAiViewModel.uiState.collect { current ->
+            // Observe transitions rather than recomposition or existing messages on launch.
+            when {
+                current.errorMessage != null && current.errorMessage != previous.errorMessage -> haptics.error()
+                previous.isProcessing && !current.isProcessing && current.errorMessage == null -> haptics.success()
+                current.conversation.lastOrNull()?.let { it.fromUser && it.id != previous.conversation.lastOrNull()?.id } == true &&
+                    previous.isTranscribing -> haptics.tap()
+                current.infoMessage != null && current.infoMessage != previous.infoMessage &&
+                    !current.isProcessing && !previous.isProcessing -> haptics.success()
+            }
+            previous = current
+        }
+    }
+    SideEffect {
+        (context as? Activity)?.window?.let {
+            WindowCompat.getInsetsController(it, it.decorView).apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+        }
+    }
+    MADv2Theme(darkTheme = dark) {
+        CompositionLocalProvider(LocalCallConfirmation provides CallConfirmationPreference(confirmationRequired) { required ->
+            confirmationRequired = required
+            preferences.edit().putBoolean(confirmationKey, required).apply()
+        }) {
+        fun navigate(target: Destination) {
+            keyboard?.hide()
+            focus.clearFocus()
+            focusRequest = false
+            if (target == Destination.Settings && destination != Destination.Settings) settingsPage = SettingsPage.Overview
+            destination = target
+            if (target in listOf(Destination.Upcoming, Destination.History, Destination.Calendar)) callAiViewModel.refreshCalls()
+        }
+        BackHandler(destination != Destination.Home || capture.recording) {
+            when {
+                capture.recording -> { capture.cancel(); callAiViewModel.setRecording(false) }
+                destination == Destination.Settings && settingsPage != SettingsPage.Overview -> settingsPage = SettingsPage.Overview
+                else -> destination = Destination.Home
+            }
+        }
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.fillMaxSize()) {
+                if (!dark) Image(painterResource(R.drawable.landing_bg), null, Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop, alpha = .55f)
+                Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
+                    if (destination != Destination.Home && destination != Destination.Request) Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        PocketIconButton(Glyph.Back, "Back to home",
+                            enabled = !capture.recording) {
+                            if (destination == Destination.Settings && settingsPage != SettingsPage.Overview)
+                                settingsPage = SettingsPage.Overview
+                            else navigate(Destination.Home)
+                        }
+                        Image(painterResource(R.drawable.ic_voxie_mark), null, Modifier.size(26.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(when(destination) {
+                            Destination.Home -> "Voxie"
+                            Destination.Request -> "Voxie"
+                            Destination.Upcoming -> "Scheduled calls"
+                            Destination.History -> "Call history"
+                            Destination.Calendar -> "Calendar"
+                            Destination.Contacts -> "Contacts"
+                            Destination.Groups -> "Groups"
+                            Destination.Templates -> "Templates"
+                            Destination.Settings -> if (settingsPage == SettingsPage.Overview) "Settings" else settingsPage.name
+                            Destination.Credits -> "Credits"
+                        }, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        when(destination) {
+                            Destination.Request -> PocketIconButton(Glyph.New, "New call", !state.isProcessing && !capture.recording, ::newCall)
+                            Destination.Upcoming -> {
+                                PocketIconButton(Glyph.Calendar, "Open calendar") { navigate(Destination.Calendar) }
+                                PocketIconButton(Glyph.Refresh, "Refresh calls", !state.isRefreshingCalls, callAiViewModel::refreshCalls)
                             }
-                            innerTextField()
-                        }
-                    },
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    SmallCircleButton(
-                        onClick = onMicClick,
-                        containerColor = if (isRecording) AppDanger else Color.Transparent,
-                        contentColor = if (isRecording) Color.White else AppText,
-                    ) {
-                        if (isRecording) {
-                            StopGlyph()
-                        } else {
-                            DrawableGlyph(
-                                drawableRes = R.drawable.baseline_mic_24,
-                                tint = AppText,
-                            )
+                            Destination.History, Destination.Calendar ->
+                                PocketIconButton(Glyph.Refresh, "Refresh calls", !state.isRefreshingCalls, callAiViewModel::refreshCalls)
+                            Destination.Contacts -> PocketIconButton(Glyph.Refresh, "Refresh contacts", !loadingContacts, ::requestContacts)
+                            else -> Unit
                         }
                     }
-                    SmallCircleButton(
-                        onClick = onSubmitPrompt,
-                        containerColor = if (isProcessing || isRecording) AppAccentSoft else AppAccent,
-                        contentColor = Color.White,
-                    ) {
-                        ArrowGlyph()
-                    }
-                }
-            }
-
-            AnimatedVisibility(
-                visible = isRecording || inlineMessage.isNotBlank(),
-            ) {
-                ComposerStatusStrip(
-                    label = if (isRecording) "Listening..." else inlineMessage,
-                    isRecording = isRecording,
-                    isThinking = !isRecording,
-                    modifier = Modifier.padding(top = 14.dp, end = 8.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MessageBanner(
-    message: String,
-    isError: Boolean,
-    modifier: Modifier = Modifier,
-    onDismiss: () -> Unit,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = if (isError) AppDangerSoft else AppAccentSoft,
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = message,
-                modifier = Modifier.weight(1f),
-                color = if (isError) AppDanger else AppAccent,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                ),
-            )
-            Text(
-                text = "Dismiss",
-                modifier = Modifier
-                    .padding(start = 12.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onDismiss,
-                    ),
-                color = if (isError) AppDanger else AppAccent,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ComposerStatusStrip(
-    label: String,
-    isRecording: Boolean,
-    isThinking: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                color = if (isRecording) AppDanger else AppAccent,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                ),
-            )
-            Text(
-                text = if (isRecording) "Tap the square to stop" else "Turning your voice into text",
-                modifier = Modifier.padding(top = 4.dp),
-                color = AppMuted,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                ),
-            )
-        }
-        VoiceWaveform(
-            active = isRecording || isThinking,
-            tint = if (isRecording) AppDanger else AppAccent,
-        )
-    }
-}
-
-@Composable
-private fun VoiceWaveform(
-    active: Boolean,
-    tint: Color,
-    modifier: Modifier = Modifier,
-) {
-    val transition = rememberInfiniteTransition(label = "voice-wave")
-    val progress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (active) 1100 else 1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "voice-wave-progress",
-    )
-
-    Canvas(
-        modifier = modifier
-            .width(94.dp)
-            .height(28.dp)
-    ) {
-        val bars = 12
-        val barWidth = size.width / (bars * 1.8f)
-        val gap = barWidth * 0.8f
-        for (index in 0 until bars) {
-            val oscillation = (sin((progress * 6f) + index * 0.55f) + 1f) / 2f
-            val normalizedHeight = if (active) 0.25f + (oscillation * 0.75f) else 0.2f
-            val barHeight = size.height * normalizedHeight
-            val left = index * (barWidth + gap)
-            drawRoundRect(
-                color = tint.copy(alpha = 0.28f + (oscillation * 0.64f)),
-                topLeft = Offset(left, (size.height - barHeight) / 2f),
-                size = Size(barWidth, barHeight),
-                cornerRadius = CornerRadius(barWidth, barWidth),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProcessingCard(
-    headline: String,
-    detail: String,
-) {
-    val transition = rememberInfiniteTransition(label = "processing-card")
-    val glow by transition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "processing-card-glow",
-    )
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(22.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White,
-                            AppAccentSoft.copy(alpha = glow),
-                        )
-                    )
-                )
-                .padding(18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            VoiceWaveform(active = true, tint = AppAccent)
-            Text(
-                text = headline,
-                modifier = Modifier.padding(top = 16.dp),
-                color = AppText,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            )
-            Text(
-                text = detail,
-                modifier = Modifier.padding(top = 8.dp),
-                color = AppMuted,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    textAlign = TextAlign.Center,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun MissingFieldsCard(
-    draft: MissingFieldsDraft,
-    onFieldChange: (String, String) -> Unit,
-    onContinue: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-        ) {
-            Text(
-                text = "One more thing",
-                color = AppAccent,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                ),
-            )
-            Text(
-                text = "Fill only what is missing.",
-                modifier = Modifier.padding(top = 8.dp),
-                color = AppText,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            )
-
-            draft.fields.forEach { field ->
-                Spacer(modifier = Modifier.height(14.dp))
-                FieldLabel(labelFor(field))
-                FieldInput(
-                    value = valueFor(field, draft),
-                    placeholder = placeholderFor(field),
-                    onValueChange = { onFieldChange(field, it) },
-                )
-            }
-
-            FilledActionButton(
-                label = "Continue",
-                modifier = Modifier.padding(top = 18.dp),
-                onClick = onContinue,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ConfirmationCard(
-    draft: ConfirmationDraft,
-    onConfirm: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-        ) {
-            Text(
-                text = "Here's what I understood",
-                color = AppAccent,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                ),
-            )
-            Text(
-                text = "Confirm this call",
-                modifier = Modifier.padding(top = 8.dp),
-                color = AppText,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-            ConfirmationItem(label = "Call", value = "${draft.contactName} / ${draft.contactNumber}")
-            Spacer(modifier = Modifier.height(10.dp))
-            ConfirmationItem(label = "When", value = formatTime(draft.scheduledTime))
-            Spacer(modifier = Modifier.height(10.dp))
-            ConfirmationItem(label = "Say", value = draft.messagePreview)
-
-            FilledActionButton(
-                label = "Schedule call",
-                modifier = Modifier.padding(top = 18.dp),
-                onClick = onConfirm,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ConfirmationItem(
-    label: String,
-    value: String,
-) {
-    Surface(
-        color = AppPanelAlt,
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-        ) {
-            Text(
-                text = label.uppercase(),
-                color = AppMuted,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp,
-                ),
-            )
-            Text(
-                text = value,
-                modifier = Modifier.padding(top = 6.dp),
-                color = AppText,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun FlowActions(
-    quickActions: List<QuickAction>,
-    onQuickActionClick: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            quickActions.take(2).forEach { action ->
-                ActionPill(
-                    label = action.title,
-                    onClick = { onQuickActionClick(action.prompt) },
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        ActionPill(
-            label = quickActions.last().title,
-            onClick = { onQuickActionClick(quickActions.last().prompt) },
-        )
-    }
-}
-
-@Composable
-private fun DebugCard(
-    feedbackJson: String,
-    modifier: Modifier = Modifier,
-) {
-    if (feedbackJson.isBlank()) {
-        return
-    }
-
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-        ) {
-            Text(
-                text = "Agent response",
-                color = AppAccent,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                ),
-            )
-            Text(
-                text = feedbackJson,
-                modifier = Modifier.padding(top = 10.dp),
-                color = AppMuted,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun SettingsCard(
-    backendBaseUrl: String,
-    userId: String,
-    userName: String,
-    onBackendBaseUrlChange: (String) -> Unit,
-    onUserIdChange: (String) -> Unit,
-    onUserNameChange: (String) -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = AppPanel,
-        shape = RoundedCornerShape(20.dp),
-        shadowElevation = 8.dp,
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-        ) {
-            Text(
-                text = "Testing Setup",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
-                ),
-                color = AppText,
-            )
-            Text(
-                text = "Physical phone default: http://192.168.29.220:5000/ on the same Wi-Fi. Emulator default: http://10.0.2.2:5000/.",
-                modifier = Modifier.padding(top = 8.dp),
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                ),
-                color = AppMuted,
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-            FieldLabel("Backend URL")
-            FieldInput(
-                value = backendBaseUrl,
-                placeholder = "http://192.168.29.220:5000/",
-                onValueChange = onBackendBaseUrlChange,
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-            FieldLabel("User ID")
-            FieldInput(
-                value = userId,
-                placeholder = "user_001",
-                onValueChange = onUserIdChange,
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-            FieldLabel("Your name")
-            FieldInput(
-                value = userName,
-                placeholder = "Ayush",
-                onValueChange = onUserNameChange,
-            )
-        }
-    }
-}
-
-@Composable
-internal fun ScheduledTab(
-    uiState: CallAiUiState,
-    onRefreshCalls: () -> Unit,
-    onCancelCall: (String) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 18.dp),
-    ) {
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "CallAI",
-                    color = AppAccent,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp,
-                    ),
-                )
-                Text(
-                    text = "Scheduled",
-                    modifier = Modifier.padding(top = 8.dp),
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 34.sp,
-                        lineHeight = 38.sp,
-                    ),
-                    color = AppText,
-                )
-                Text(
-                    text = "Your calls, one day at a time.",
-                    modifier = Modifier.padding(top = 8.dp),
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp,
-                    ),
-                    color = AppMuted,
-                )
-            }
-            SmallCircleButton(
-                onClick = onRefreshCalls,
-                containerColor = if (uiState.isRefreshingCalls) AppAccentSoft else Color.White,
-                contentColor = AppAccent,
-            ) {
-                DrawableGlyph(
-                    drawableRes = R.drawable.refresh,
-                    tint = AppAccent,
-                )
-            }
-        }
-
-        CallCalendar(
-            uiState = uiState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(top = 20.dp),
-        ) { call ->
-            ScheduledCallItem(call = call, onCancelCall = onCancelCall)
-        }
-    }
-}
-
-@Composable
-private fun ScheduledCallItem(
-    call: ScheduledCallUiModel,
-    onCancelCall: (String) -> Unit,
-) {
-    Surface(
-        color = Color.White,
-        shape = RoundedCornerShape(18.dp),
-        shadowElevation = 2.dp,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = call.status.uppercase(),
-                        color = if (call.status == "Connected") AppAccent else AppMuted,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp,
-                        ),
-                    )
-                    Text(
-                        text = call.contactName,
-                        modifier = Modifier.padding(top = 8.dp),
-                        color = AppText,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp,
-                        ),
-                    )
-                }
-                StatusBadge(label = call.status)
-            }
-
-            Text(
-                text = "${call.timeLabel} / ${call.contactNumber}",
-                modifier = Modifier.padding(top = 10.dp),
-                color = AppMuted,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-            )
-            Text(
-                text = call.message,
-                modifier = Modifier.padding(top = 12.dp),
-                color = AppText,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp,
-                ),
-            )
-
-            if (call.canCancel) {
-                Text(
-                    text = "Cancel",
-                    modifier = Modifier
-                        .padding(top = 12.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onCancelCall(call.id) },
-                        ),
-                    color = AppDanger,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyCard(text: String) {
-    Surface(
-        color = AppPanel,
-        shape = RoundedCornerShape(18.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 28.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = text,
-                color = AppMuted,
-                style = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.Center),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ContactsTab(
-    uiState: CallAiUiState,
-    onOpenSettings: () -> Unit,
-    onSetContacts: (List<ContactDraft>) -> Unit,
-    onShowError: (String) -> Unit,
-) {
-    val context = LocalContext.current
-    var searchQuery by remember { mutableStateOf("") }
-    var showAllContacts by remember { mutableStateOf(false) }
-    val hasContactsPermission = hasPermission(context, Manifest.permission.READ_CONTACTS)
-    val contactsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            onSetContacts(loadPhoneContacts(context))
-        } else {
-            onShowError("Contacts permission is needed to sync the phonebook.")
-        }
-    }
-
-    LaunchedEffect(hasContactsPermission) {
-        if (hasContactsPermission && uiState.contacts.isEmpty()) {
-            onSetContacts(loadPhoneContacts(context))
-        }
-    }
-
-    val filteredContacts = uiState.contacts.filter { contact ->
-        if (searchQuery.isBlank()) {
-            true
-        } else {
-            val needle = searchQuery.trim().lowercase()
-            contact.name.lowercase().contains(needle) || contact.number.contains(needle)
-        }
-    }
-    val visibleContacts = if (showAllContacts || searchQuery.isNotBlank()) filteredContacts else filteredContacts.take(CONTACTS_PREVIEW_COUNT)
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 18.dp),
-        horizontalAlignment = Alignment.Start,
-    ) {
-        Spacer(modifier = Modifier.height(28.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Contacts",
-                    color = AppAccent,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp,
-                    ),
-                )
-                Text(
-                    text = if (hasContactsPermission) "Search your phonebook" else "Bring in your phone contacts",
-                    modifier = Modifier.padding(top = 8.dp),
-                    color = AppText,
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 30.sp,
-                        lineHeight = 34.sp,
-                    ),
-                )
-            }
-            Surface(
-                modifier = Modifier.size(48.dp),
-                color = AppAccentSoft,
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    DrawableGlyph(
-                        drawableRes = R.drawable.outline_account_circle_24,
-                        tint = AppAccent,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
-        }
-        Text(
-            text = if (hasContactsPermission) {
-                "These ${uiState.contacts.size} contacts are what the scheduling agent uses to match names from your prompt."
-            } else {
-                "Grant access once and the app will use your actual phonebook instead of hardcoded testing contacts."
-            },
-            modifier = Modifier.padding(top = 12.dp),
-            color = AppMuted,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontSize = 15.sp,
-                lineHeight = 21.sp,
-            ),
-        )
-        Spacer(modifier = Modifier.height(22.dp))
-        if (!hasContactsPermission) {
-            FilledActionButton(
-                label = "Allow contacts access",
-                onClick = { contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS) },
-            )
-        } else {
-            ActionPill(
-                label = "Refresh contacts",
-                onClick = { onSetContacts(loadPhoneContacts(context)) },
-            )
-            Spacer(modifier = Modifier.height(18.dp))
-            FieldInput(
-                value = searchQuery,
-                placeholder = "Search name or number",
-                onValueChange = {
-                    searchQuery = it
-                    if (it.isNotBlank()) {
-                        showAllContacts = true
-                    }
-                },
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            if (uiState.contacts.isEmpty()) {
-                EmptyCard(text = "No phone contacts were found.")
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 110.dp),
-                ) {
-                    items(visibleContacts, key = { it.id }) { contact ->
-                        Surface(
-                            color = Color.White,
-                            shape = RoundedCornerShape(18.dp),
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                            ) {
-                                Text(
-                                    text = contact.name,
-                                    color = AppText,
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                )
-                                Text(
-                                    text = contact.number,
-                                    modifier = Modifier.padding(top = 6.dp),
-                                    color = AppMuted,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                                )
+                    VoxieTransition(destination,
+                        modifier = Modifier.weight(1f).padding(bottom = bottomBarClearance)) { screen ->
+                        screenStates.SaveableStateProvider(screen.name) {
+                        when(screen) {
+                            Destination.Home -> VoxieHomeScreen(state.copy(userName = account?.user?.fullName ?: state.userName), onMakeCall = ::newCall,
+                                onContacts = { navigate(if (mode == "business") Destination.Groups else Destination.Contacts);
+                                    if (mode != "business") requestContacts() }, onCall = { selectedCall = it },
+                                business = mode == "business", credits = profileState.balance,
+                                onGroups = { navigate(Destination.Groups) },
+                                onTemplates = { navigate(Destination.Templates) },
+                                onViewAll = { recent -> navigate(if (recent) Destination.History else Destination.Upcoming) }) {
+                                if (businessState.busy) ThinkingIndicator("Finding your contacts")
+                                if (mode == "business" && (attachedGroup != null || attachedTemplate != null)) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        attachedGroup?.let { group -> TextButton(onClick = { attachedGroup = null }) { Text("${group.name}  x") } }
+                                        attachedTemplate?.let { template -> TextButton(onClick = { attachedTemplate = null }) { Text("${template.name}  x") } }
+                                    }
+                                }
+                                PocketComposer(state.prompt, callAiViewModel::setPrompt, state.isRecording, state.isTranscribing,
+                                    state.isProcessing || businessState.busy, capture.samples, homeFocus,
+                                    onPlus = { destination = Destination.Request; addPromptItem = true
+                                        templatePickerOnly = true; business.loadTemplates() }, onMic = ::recordVoice,
+                                    onCancel = { capture.cancel(); callAiViewModel.setRecording(false) }, onFinish = ::finishVoice,
+                                    onSend = { keyboard?.hide(); focus.clearFocus(); submitHomePrompt() },
+                                    homeStyle = true, onFocus = { focusRequest = true; destination = Destination.Request })
                             }
-                        }
-                    }
-                    if (!showAllContacts && searchQuery.isBlank() && filteredContacts.size > CONTACTS_PREVIEW_COUNT) {
-                        item {
-                            ActionPill(
-                                label = "...more",
-                                onClick = { showAllContacts = true },
+                            Destination.Request -> VoxieRequestScreen(state.copy(
+                                isProcessing = state.isProcessing || businessState.busy,
+                                processingMessage = businessState.processingMessage ?: state.processingMessage), capture.samples,
+                                onPrompt = callAiViewModel::setPrompt,
+                                onSubmit = { keyboard?.hide(); focus.clearFocus(); focusRequest = false
+                                    if (state.missingFieldsDraft == null && mode == "business") submitHomePrompt()
+                                    else callAiViewModel.submitPrompt() },
+                                onConfirm = callAiViewModel::confirmSchedule,
+                                onPreviewAudio = callAiViewModel::previewAudio,
+                                onEdit = callAiViewModel::editConfirmation,
+                                onField = callAiViewModel::updateMissingField,
+                                onPlus = { keyboard?.hide(); addPromptItem = true; templatePickerOnly = true; business.loadTemplates() },
+                                onMic = {
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                                        startRecording()
+                                    else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                                },
+                                onCancelRecording = { capture.cancel(); callAiViewModel.setRecording(false) },
+                                onFinishRecording = {
+                                    val audio = capture.finish()
+                                    callAiViewModel.setRecording(false)
+                                    if (audio != null) callAiViewModel.transcribeAudio(audio, onReady = {
+                                        if (mode == "business" && state.missingFieldsDraft == null) submitHomePrompt(it)
+                                        else callAiViewModel.submitPrompt()
+                                    })
+                                    else callAiViewModel.showError("That recording was too short. Please try again.")
+                                },
+                                onSearchContacts = { contactPicker = true },
+                                onViewCall = { id ->
+                                    selectedCall = (state.upcomingCalls + state.historyCalls).find { it.id == id }
+                                    if (selectedCall == null) navigate(Destination.Upcoming)
+                                },
+                                onDismissError = callAiViewModel::clearMessages,
+                                mode = mode,
+                                timezone = profileState.timezone,
+                                focusComposer = focusRequest,
+                                templateName = attachedTemplate?.name,
+                                onClearTemplate = { attachedTemplate = null },
                             )
+                            Destination.Upcoming -> CallsScreen(state.upcomingCalls, state.isRefreshingCalls, state.errorMessage,
+                                onCall = { selectedCall = it }, onRefresh = callAiViewModel::refreshCalls,
+                                onHistory = { navigate(if (it) Destination.History else Destination.Upcoming) })
+                            Destination.History -> CallsScreen(state.historyCalls, state.isRefreshingCalls, state.errorMessage,
+                                history = true, onCall = { selectedCall = it }, onRefresh = callAiViewModel::refreshCalls,
+                                onHistory = { navigate(if (it) Destination.History else Destination.Upcoming) })
+                            Destination.Calendar -> CallCalendar(state, Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                                onSchedule = { day ->
+                                    val zone = ZoneId.of(profileState.timezone)
+                                    val time = if (day == LocalDate.now(zone)) LocalTime.now(zone).plusMinutes(10) else LocalTime.of(9, 0)
+                                    callAiViewModel.newConversation()
+                                    callAiViewModel.startManualCall(day.atTime(time).atZone(zone).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                                    destination = Destination.Request
+                                }) {
+                                CallListRow(it, onClick = { selectedCall = it })
+                            }
+                            Destination.Contacts -> ContactsScreen(state.contacts, contactsGranted, loadingContacts,
+                                onPermission = ::requestContacts, onContact = { selectedContact = it })
+                            Destination.Templates -> TemplatesScreen(business, onUse = { template ->
+                                callAiViewModel.newConversation()
+                                callAiViewModel.setPrompt("Use \"${template.name}\" template to call ")
+                                navigate(Destination.Request)
+                            })
+                            Destination.Groups -> BusinessScreen(business,
+                                timezone = profileState.timezone,
+                                initialGroupId = pendingCampaignGroup, initialPrompt = pendingCampaignPrompt,
+                                onInitialConsumed = { pendingCampaignGroup = null; pendingCampaignPrompt = "" },
+                                onIndividual = { contact ->
+                                    callAiViewModel.newConversation()
+                                    callAiViewModel.setPrompt("Call ${contact.name} at ${contact.number} and say ")
+                                    navigate(Destination.Request)
+                                }, onSheet = { sheetGroup = it })
+                            Destination.Settings -> SettingsScreen(state.copy(userName = account?.user?.fullName ?: state.userName), theme,
+                                onTheme = { theme = it; preferences.edit().putString("theme", it).apply() },
+                                onSignOut = onSignOut,
+                                onBackend = onBackendChanged,
+                                onPermissions = {
+                                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+                                }, mode = mode, profile = profileState, onSaveProfile = profile::save,
+                                page = settingsPage, onPage = { settingsPage = it })
+                            Destination.Credits -> CreditsScreen(onBuy = onCredits, balance = profileState.balance,
+                                plan = profileState.plan)
+                        }
                         }
                     }
-                    if (filteredContacts.isEmpty()) {
-                        item {
-                            EmptyCard(text = "No contacts matched your search.")
-                        }
-                    }
-                    item { Spacer(modifier = Modifier.height(110.dp)) }
+                }
+                Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding()) {
+                    VoxieBottomBar(selected = when (destination) {
+                        Destination.Home, Destination.Request -> "Home"
+                        Destination.Settings -> "Profile"
+                        Destination.Credits -> "Credits"
+                        Destination.Contacts -> if (mode == "business") "" else "Contacts"
+                        Destination.Templates -> ""
+                        Destination.Groups -> "Groups"
+                        else -> "Calls"
+                    }, enabled = !state.isProcessing && !capture.recording,
+                        onHome = { navigate(Destination.Home) }, onCalls = { navigate(Destination.Upcoming) },
+                        onCredits = { navigate(Destination.Credits) }, onProfile = { navigate(Destination.Settings) },
+                        onGroups = { if (mode == "business") navigate(Destination.Groups)
+                        else { navigate(Destination.Contacts); requestContacts() } }, business = mode == "business")
+                }
+                }
+            }
+        businessState.selection?.let { selection ->
+            CampaignComposer(selection, businessState.draft, businessState.busy, businessState.error,
+                businessState.selectionPrompt, profileState.timezone,
+                chooseRecipientsFirst = businessState.chooseRecipientsFirst,
+                onDismiss = business::clearSelection,
+                onPreview = { prompt, recipients, templateId -> business.preview(selection.id, prompt, recipients, templateId ?: attachedTemplate?.id) },
+                onEdit = business::clearDraft, onConfirm = business::schedule,
+                templates = businessState.templates, onLoadTemplates = business::loadTemplates)
+        }
+        if (addPromptItem) PromptAttachmentPicker(businessState.groups, businessState.templates, businessState.busy,
+            templatesOnly = templatePickerOnly,
+            onDismiss = { addPromptItem = false },
+            onGroup = { attachedGroup = it; addPromptItem = false },
+            onTemplate = { attachedTemplate = it; addPromptItem = false })
+        if (contactPicker) ModalBottomSheet(onDismissRequest = { contactPicker = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = MaterialTheme.colorScheme.surface) {
+            Box(Modifier.fillMaxWidth().fillMaxHeight(.8f)) {
+                ContactsScreen(state.contacts, contactsGranted, loadingContacts, ::requestContacts, ::chooseContact)
+            }
+        }
+        sheetGroup?.let { group -> GoogleSheetImport(group, onDismiss = { sheetGroup = null },
+            onRows = { name, rows -> business.sheet(name, rows) }) }
+        selectedContact?.let { contact ->
+            ModalBottomSheet(onDismissRequest = { selectedContact = null }, containerColor = MaterialTheme.colorScheme.surface) {
+                Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(contact.name, style = MaterialTheme.typography.titleLarge)
+                    Text(contact.number, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = hapticClick { chooseContact(contact) }, enabled = !state.isProcessing) { Text("Ask PocketCall to call") }
                 }
             }
         }
-
-        if (!hasContactsPermission) {
-            Spacer(modifier = Modifier.height(12.dp))
-            ActionPill(
-                label = "Open testing setup",
-                onClick = onOpenSettings,
-            )
+        selectedCall?.let { original ->
+            val call = (state.upcomingCalls + state.historyCalls).find { it.id == original.id } ?: original
+            CallDetailSheet(call, onDismiss = { selectedCall = null },
+                onCancel = { callAiViewModel.cancelCall(call.id); selectedCall = null },
+                onCallAgain = {
+                    newCall()
+                    callAiViewModel.setPrompt("Call ${call.contactName} at ${call.contactNumber} and say: ${call.message}")
+                    selectedCall = null
+                }, canStartNew = !state.isProcessing && !capture.recording)
+        }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BottomNavigationBar(
-    selectedTab: AppTab,
-    onTabSelected: (AppTab) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = AppPanel,
-        shadowElevation = 10.dp,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-        ) {
-            NavItem(
-                label = "Home",
-                isActive = selectedTab == AppTab.Home,
-                onClick = { onTabSelected(AppTab.Home) },
-            ) {
-                HomeGlyph(color = if (selectedTab == AppTab.Home) AppAccent else AppMuted)
-            }
-            NavItem(
-                label = "Scheduled",
-                isActive = selectedTab == AppTab.Scheduled,
-                onClick = { onTabSelected(AppTab.Scheduled) },
-            ) {
-                CalendarGlyph(color = if (selectedTab == AppTab.Scheduled) AppAccent else AppMuted)
-            }
-            NavItem(
-                label = "Contacts",
-                isActive = selectedTab == AppTab.Contacts,
-                onClick = { onTabSelected(AppTab.Contacts) },
-            ) {
-                DrawableGlyph(
-                    drawableRes = R.drawable.outline_account_circle_24,
-                    tint = if (selectedTab == AppTab.Contacts) AppAccent else AppMuted,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NavItem(
-    label: String,
-    isActive: Boolean,
-    onClick: () -> Unit,
-    icon: @Composable () -> Unit,
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            onClick = onClick,
-        ),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(CircleShape)
-                .background(if (isActive) AppAccentSoft else Color.Transparent),
-            contentAlignment = Alignment.Center,
-        ) {
-            icon()
-        }
-        Text(
-            text = label,
-            modifier = Modifier.padding(top = 6.dp),
-            color = if (isActive) AppAccent else AppMuted,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 11.sp,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun ActionPill(
-    label: String,
-    onClick: () -> Unit,
-) {
-    Surface(
-        color = AppPanelAlt,
-        shape = RoundedCornerShape(999.dp),
-        modifier = Modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            onClick = onClick,
-        ),
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp),
-            color = AppText,
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.Medium,
-                fontSize = 13.sp,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun WelcomeHeader(
-    greeting: String,
-    userName: String,
-) {
-    Surface(
-        color = Color.Transparent,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = greeting.uppercase(),
-                color = AppAccent,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.4.sp,
-                ),
-            )
-            Text(
-                text = userName,
-                modifier = Modifier.padding(top = 12.dp),
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 44.sp,
-                    lineHeight = 46.sp,
-                    textAlign = TextAlign.Center,
-                ),
-                color = AppText,
-            )
-            Canvas(
-                modifier = Modifier
-                    .padding(top = 16.dp)
-                    .width(112.dp)
-                    .height(10.dp)
-            ) {
-                drawRoundRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            AppAccentSoft.copy(alpha = 0.15f),
-                            AppAccent.copy(alpha = 0.75f),
-                            AppAccentSoft.copy(alpha = 0.15f),
-                        )
-                    ),
-                    topLeft = Offset.Zero,
-                    size = size,
-                    cornerRadius = CornerRadius(size.height, size.height),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun FilledActionButton(
-    label: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        color = AppAccent,
-        shape = RoundedCornerShape(999.dp),
-    ) {
-        Box(
-            modifier = Modifier.padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = label,
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun SmallCircleButton(
-    onClick: () -> Unit,
-    containerColor: Color,
-    contentColor: Color,
-    label: String? = null,
-    content: @Composable (() -> Unit)? = null,
-) {
-    Surface(
-        modifier = Modifier
-            .size(38.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        color = containerColor,
-        shape = CircleShape,
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            if (content != null) {
-                content()
-            } else {
-                Text(
-                    text = label.orEmpty(),
-                    color = contentColor,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                    ),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DrawableGlyph(
-    @DrawableRes drawableRes: Int,
-    tint: Color,
-    modifier: Modifier = Modifier,
-) {
-    Icon(
-        painter = painterResource(id = drawableRes),
-        contentDescription = null,
-        tint = tint,
-        modifier = modifier.size(18.dp),
-    )
-}
-
-@Composable
-private fun FieldLabel(text: String) {
-    Text(
-        text = text,
-        color = AppMuted,
-        style = MaterialTheme.typography.labelMedium.copy(
-            fontWeight = FontWeight.Medium,
-            fontSize = 13.sp,
-        ),
-    )
-}
-
-@Composable
-private fun FieldInput(
-    value: String,
-    placeholder: String,
-    onValueChange: (String) -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(14.dp),
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 13.dp),
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = AppText,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            ),
-            decorationBox = { innerTextField ->
-                if (value.isBlank()) {
-                    Text(
-                        text = placeholder,
-                        color = AppMuted,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                        ),
-                    )
+private fun PromptAttachmentPicker(groups: List<BusinessGroup>, templates: List<MessageTemplate>, busy: Boolean,
+    templatesOnly: Boolean = false, onDismiss: () -> Unit, onGroup: (BusinessGroup) -> Unit, onTemplate: (MessageTemplate) -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 480.dp).verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(if (templatesOnly) "Choose a template" else "Add to your call", style = MaterialTheme.typography.titleLarge)
+            Text(if (templatesOnly) "Use a saved message for this call." else "Pick a saved group or message template.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (!templatesOnly) {
+                Text("Groups", style = MaterialTheme.typography.titleMedium)
+                groups.forEach { group ->
+                OutlinedButton(onClick = { onGroup(group) }, modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp)) { Text(group.name) }
                 }
-                innerTextField()
-            },
-        )
-    }
-}
-
-@Composable
-private fun SectionHeader(
-    title: String,
-    count: Int,
-    muted: Boolean = false,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = title,
-            color = AppText,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-            ),
-        )
-        Surface(
-            color = if (muted) AppPanelAlt else AppAccentSoft,
-            shape = RoundedCornerShape(999.dp),
-        ) {
-            Text(
-                text = count.toString(),
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                color = if (muted) AppMuted else AppAccent,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatusBadge(label: String) {
-    val background = when (label.lowercase()) {
-        "connected" -> AppAccentSoft
-        "pending" -> Color(0xFFF6EFE3)
-        "failed", "cancelled" -> AppDangerSoft
-        else -> AppPanelAlt
-    }
-    val color = when (label.lowercase()) {
-        "connected" -> AppAccent
-        "pending" -> Color(0xFFB6782D)
-        "failed", "cancelled" -> AppDanger
-        else -> AppMuted
-    }
-
-    Surface(
-        color = background,
-        shape = RoundedCornerShape(999.dp),
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-            color = color,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-            ),
-        )
-    }
-}
-
-private fun labelFor(field: String): String = when (field) {
-    "contact_name" -> "Contact name"
-    "contact_number" -> "Contact number"
-    "message" -> "Message"
-    "scheduled_time" -> "Scheduled time"
-    else -> field
-}
-
-private fun placeholderFor(field: String): String = when (field) {
-    "contact_name" -> "Ayush Waman"
-    "contact_number" -> "+918879279251"
-    "message" -> "Tell me what should be said"
-    "scheduled_time" -> "2026-08-29T17:30:00+05:30"
-    else -> field
-}
-
-private fun valueFor(field: String, draft: MissingFieldsDraft): String = when (field) {
-    "contact_name" -> draft.contactName
-    "contact_number" -> draft.contactNumber
-    "message" -> draft.message
-    "scheduled_time" -> draft.scheduledTime
-    else -> ""
-}
-
-private fun formatTime(rawTime: String?): String {
-    if (rawTime.isNullOrBlank()) {
-        return "Not provided"
-    }
-
-    return runCatching {
-        OffsetDateTime.parse(rawTime).format(DateTimeFormatter.ofPattern("EEE, d MMM · h:mm a"))
-    }.getOrElse { rawTime }
-}
-
-private fun isInlineComposerState(processingMessage: String?): Boolean {
-    val message = processingMessage.orEmpty().lowercase()
-    return message.contains("transcrib") || message.contains("voice")
-}
-
-private fun hasPermission(context: Context, permission: String): Boolean {
-    return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-}
-
-private fun loadPhoneContacts(context: Context): List<ContactDraft> {
-    val contactsByNumber = linkedMapOf<String, ContactDraft>()
-    val projection = arrayOf(
-        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-        ContactsContract.CommonDataKinds.Phone.NUMBER,
-    )
-
-    context.contentResolver.query(
-        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-        projection,
-        null,
-        null,
-        "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC",
-    )?.use { cursor ->
-        val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-        val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-        var nextId = 1L
-
-        while (cursor.moveToNext()) {
-            val rawName = cursor.getString(nameIndex).orEmpty().trim()
-            val rawNumber = cursor.getString(numberIndex).orEmpty().trim()
-            val normalizedNumber = normalizePhoneNumber(rawNumber)
-            if (rawName.isBlank() || normalizedNumber.isBlank() || contactsByNumber.containsKey(normalizedNumber)) {
-                continue
+                if (groups.isEmpty() && !busy) Text("No saved groups yet.")
             }
-            contactsByNumber[normalizedNumber] = ContactDraft(
-                id = nextId++,
-                name = rawName,
-                number = normalizedNumber,
-            )
+            Text("Templates", style = MaterialTheme.typography.titleMedium)
+            templates.forEach { template ->
+                OutlinedButton(onClick = { onTemplate(template) }, modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp)) { Text(template.name) }
+            }
+            if (templates.isEmpty() && !busy) Text("No saved templates yet.")
         }
     }
-
-    return contactsByNumber.values.toList()
 }
 
-private fun normalizePhoneNumber(rawNumber: String): String {
-    val digits = rawNumber.filter { it.isDigit() }
-    return when {
-        digits.length == 10 && digits.first() in "6789" -> "+91$digits"
-        digits.length == 12 && digits.startsWith("91") -> "+$digits"
-        digits.length == 11 && digits.startsWith("0") && digits[1] in "6789" -> "+91${digits.drop(1)}"
-        rawNumber.trim().startsWith("+") && digits.isNotBlank() -> rawNumber.trim()
-        else -> rawNumber.trim()
-    }
-}
-
-private fun createVoiceRecorder(context: Context): Pair<MediaRecorder, File> {
-    val audioFile = File.createTempFile("voice_prompt_", ".m4a", context.cacheDir)
-    val recorder = MediaRecorder().apply {
-        setAudioSource(MediaRecorder.AudioSource.MIC)
-        setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-        setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-        setAudioSamplingRate(16000)
-        setAudioEncodingBitRate(96000)
-        setOutputFile(audioFile.absolutePath)
-        prepare()
-        start()
-    }
-    return recorder to audioFile
-}
-
+// Kept as a small calendar entry point for existing callers and instrumentation.
 @Composable
-private fun StopGlyph(color: Color = Color.White) {
-    Canvas(modifier = Modifier.size(14.dp)) {
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(size.width * 0.18f, size.height * 0.18f),
-            size = Size(size.width * 0.64f, size.height * 0.64f),
-            cornerRadius = CornerRadius(4f, 4f),
-        )
+internal fun ScheduledTab(uiState: CallAiUiState, onRefreshCalls: () -> Unit, onCancelCall: (String) -> Unit) {
+    var selected by remember { mutableStateOf<ScheduledCallUiModel?>(null) }
+    CallCalendar(uiState, Modifier.fillMaxSize().padding(16.dp)) { call ->
+        CallListRow(call, onClick = { selected = call })
     }
-}
-
-@Composable
-private fun ArrowGlyph(color: Color = Color.White) {
-    Canvas(modifier = Modifier.size(16.dp)) {
-        drawLine(
-            color = color,
-            start = Offset(size.width * 0.5f, size.height * 0.84f),
-            end = Offset(size.width * 0.5f, size.height * 0.2f),
-            strokeWidth = 2.3f,
-            cap = StrokeCap.Round,
-        )
-        drawLine(
-            color = color,
-            start = Offset(size.width * 0.2f, size.height * 0.48f),
-            end = Offset(size.width * 0.5f, size.height * 0.18f),
-            strokeWidth = 2.3f,
-            cap = StrokeCap.Round,
-        )
-        drawLine(
-            color = color,
-            start = Offset(size.width * 0.8f, size.height * 0.48f),
-            end = Offset(size.width * 0.5f, size.height * 0.18f),
-            strokeWidth = 2.3f,
-            cap = StrokeCap.Round,
-        )
-    }
-}
-
-@Composable
-private fun HomeGlyph(color: Color) {
-    Canvas(modifier = Modifier.size(18.dp)) {
-        val path = Path().apply {
-            moveTo(size.width * 0.5f, size.height * 0.1f)
-            lineTo(size.width * 0.9f, size.height * 0.38f)
-            lineTo(size.width * 0.9f, size.height * 0.88f)
-            lineTo(size.width * 0.1f, size.height * 0.88f)
-            lineTo(size.width * 0.1f, size.height * 0.38f)
-            close()
-        }
-        drawPath(path = path, color = color, style = Stroke(width = 2.2f))
-    }
-}
-
-@Composable
-private fun CalendarGlyph(color: Color) {
-    Canvas(modifier = Modifier.size(18.dp)) {
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(size.width * 0.12f, size.height * 0.22f),
-            size = Size(size.width * 0.76f, size.height * 0.64f),
-            cornerRadius = CornerRadius(6f, 6f),
-            style = Stroke(width = 2.2f)
-        )
-        drawLine(
-            color = color,
-            start = Offset(size.width * 0.12f, size.height * 0.38f),
-            end = Offset(size.width * 0.88f, size.height * 0.38f),
-            strokeWidth = 2.2f,
-            cap = StrokeCap.Round,
-        )
-    }
-}
-
-@Composable
-private fun PersonGlyph(color: Color) {
-    Canvas(modifier = Modifier.size(18.dp)) {
-        drawCircle(
-            color = color,
-            radius = size.minDimension * 0.18f,
-            center = Offset(size.width * 0.5f, size.height * 0.3f),
-            style = Stroke(width = 2.2f),
-        )
-        drawArc(
-            color = color,
-            startAngle = 200f,
-            sweepAngle = 140f,
-            useCenter = false,
-            topLeft = Offset(size.width * 0.18f, size.height * 0.42f),
-            size = Size(size.width * 0.64f, size.height * 0.42f),
-            style = Stroke(width = 2.2f, cap = StrokeCap.Round),
-        )
-    }
-}
-
-@Preview(showBackground = true, backgroundColor = 0xFFF5F6F2)
-@Composable
-private fun CallAiAppPreview() {
-    MADv2Theme(dynamicColor = false) {
-        CallAiAppContent(
-            uiState = CallAiUiState(),
-            quickActions = listOf(
-                QuickAction("Call someone", "Call Ayush"),
-                QuickAction("Schedule a call", "Call Rahul tomorrow"),
-                QuickAction("Follow up with...", "Call 8879279251"),
-            ),
-            onSelectTab = {},
-            onToggleSettings = {},
-            onOpenHomeSettings = {},
-            onPromptChange = {},
-            onSubmitPrompt = {},
-            onConfirmSchedule = {},
-            onQuickActionClick = {},
-            onUserNameChange = {},
-            onUserIdChange = {},
-            onBackendBaseUrlChange = {},
-            onSetContacts = {},
-            onSetRecording = {},
-            onTranscribeAudio = {},
-            onShowError = {},
-            onMissingFieldChange = { _, _ -> },
-            onRefreshCalls = {},
-            onCancelCall = {},
-            onClearMessages = {},
-        )
+    selected?.let { call ->
+        CallDetailSheet(call, { selected = null }, { onCancelCall(call.id); selected = null }, {}, false)
     }
 }

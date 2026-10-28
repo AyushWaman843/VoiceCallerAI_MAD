@@ -47,7 +47,12 @@ data class ScheduleCallRequestDto(
     val confirmed: Boolean = false,
     @SerializedName("agent_result")
     val agentResult: AgentResultDto? = null,
+    @SerializedName("audio_preview_id")
+    val audioPreviewId: String? = null,
 )
+
+data class AudioPreviewResponseDto(@SerializedName("preview_id") val previewId: String,
+                                   @SerializedName("audio_url") val audioUrl: String)
 
 data class ScheduleCallResponseDto(
     @SerializedName("status")

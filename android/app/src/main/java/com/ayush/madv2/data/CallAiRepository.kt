@@ -2,6 +2,7 @@ package com.ayush.madv2.data
 
 import com.ayush.madv2.network.BasicResponseDto
 import com.ayush.madv2.network.CallAiApi
+import com.ayush.madv2.network.AudioPreviewResponseDto
 import com.ayush.madv2.network.CallsResponseDto
 import com.ayush.madv2.network.NetworkModule
 import com.ayush.madv2.network.ScheduleCallRequestDto
@@ -20,30 +21,38 @@ class CallAiRepository(
     suspend fun transcribeAudio(baseUrl: String, file: File): TranscriptionResponseDto {
         val requestBody = file.asRequestBody("audio/mp4".toMediaTypeOrNull())
         val audioPart = MultipartBody.Part.createFormData("audio", file.name, requestBody)
-        val response = createApi(baseUrl).transcribeAudio(audioPart)
-        return response.bodyOrThrow()
+        return authenticated(baseUrl) { it.transcribeAudio(audioPart) }
     }
 
     suspend fun scheduleCall(baseUrl: String, request: ScheduleCallRequestDto): ScheduleCallResponseDto {
-        val response = createApi(baseUrl).scheduleCall(request)
-        return response.bodyOrThrow()
+        return authenticated(baseUrl) { it.scheduleCall(request) }
     }
 
+    suspend fun previewAudio(baseUrl: String, message: String): AudioPreviewResponseDto =
+        authenticated(baseUrl) { it.previewAudio(mapOf("message" to message)) }
+
     suspend fun getCalls(baseUrl: String, userId: String): CallsResponseDto {
-        val response = createApi(baseUrl).getCalls(userId)
-        return response.bodyOrThrow()
+        return authenticated(baseUrl) { it.getCalls(userId) }
     }
 
     suspend fun cancelCall(baseUrl: String, jobId: String): BasicResponseDto {
-        val response = createApi(baseUrl).cancelCall(jobId)
-        return response.bodyOrThrow()
+        return authenticated(baseUrl) { it.cancelCall(jobId) }
     }
 
     fun toPrettyJson(value: Any): String = gson.toJson(value)
 
-    private fun createApi(baseUrl: String): CallAiApi = NetworkModule.createApi(baseUrl)
+    private suspend fun <T> authenticated(baseUrl: String, request: suspend (CallAiApi) -> Response<T>): T {
+        val token = AccountSession.accessToken(baseUrl)
+        val response = request(NetworkModule.createApi(baseUrl, token))
+        if (response.code() == 401) {
+            // A response from an old request must not sign out a newer session.
+            if (AccountSession.account.value?.accessToken == token) AccountSession.clear()
+            throw SignInRequired()
+        }
+        return response.bodyOrThrow()
+    }
 
-    private inline fun <reified T> Response<T>.bodyOrThrow(): T {
+    private fun <T> Response<T>.bodyOrThrow(): T {
         if (isSuccessful) {
             return body() ?: throw IllegalStateException("The server returned an empty response.")
         }

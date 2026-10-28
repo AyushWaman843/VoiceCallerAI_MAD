@@ -36,6 +36,8 @@ android {
 }
 
 dependencies {
+    implementation("com.razorpay:checkout:1.6.41")
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

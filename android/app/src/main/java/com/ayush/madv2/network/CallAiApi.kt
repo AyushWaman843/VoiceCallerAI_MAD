@@ -12,6 +12,8 @@ import retrofit2.http.Part
 import retrofit2.http.Query
 
 interface CallAiApi {
+    @POST("calls/preview-audio")
+    suspend fun previewAudio(@Body request: Map<String, String>): Response<AudioPreviewResponseDto>
     @Multipart
     @POST("transcribe-audio")
     suspend fun transcribeAudio(@Part audio: MultipartBody.Part): Response<TranscriptionResponseDto>

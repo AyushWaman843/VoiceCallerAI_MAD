@@ -15,13 +15,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.io.File
-import java.time.OffsetDateTime
-import java.time.format.DateTimeFormatter
 
 private const val EMULATOR_BASE_URL = "http://10.0.2.2:5000/"
-private const val DEVICE_BASE_URL = "http://192.168.29.220:5000/"
+private const val DEVICE_BASE_URL = "http://10.125.38.233:5000/"
 
-private fun defaultBaseUrl(): String {
+internal fun defaultBaseUrl(): String {
     return if (isProbablyRunningOnEmulator()) EMULATOR_BASE_URL else DEVICE_BASE_URL
 }
 
@@ -64,6 +62,9 @@ data class ConfirmationDraft(
     val messagePreview: String,
     val scheduledTime: String?,
     val agentResult: AgentResultDto?,
+    val audioPreviewId: String? = null,
+    val audioPreviewUrl: String? = null,
+    val confirmationKey: String = java.util.UUID.randomUUID().toString(),
 )
 
 data class ScheduledCallUiModel(
@@ -81,8 +82,8 @@ data class CallAiUiState(
     val selectedTab: AppTab = AppTab.Home,
     val showSettings: Boolean = false,
     val backendBaseUrl: String = defaultBaseUrl(),
-    val userId: String = "user_001",
-    val userName: String = "Ayush",
+    val userId: String = "",
+    val userName: String = "",
     val prompt: String = "",
     val contacts: List<ContactDraft> = emptyList(),
     val isProcessing: Boolean = false,
@@ -96,15 +97,66 @@ data class CallAiUiState(
     val confirmationDraft: ConfirmationDraft? = null,
     val upcomingCalls: List<ScheduledCallUiModel> = emptyList(),
     val historyCalls: List<ScheduledCallUiModel> = emptyList(),
+    val conversation: List<ChatEntry> = emptyList(),
+    val conversationId: Int = 0,
+    val isTranscribing: Boolean = false,
+)
+
+data class ChatEntry(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val text: String,
+    val fromUser: Boolean = false,
+    val callId: String? = null,
 )
 
 class CallAiViewModel(
     private val repository: CallAiRepository = CallAiRepository(),
+    initialState: CallAiUiState = CallAiUiState(),
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(CallAiUiState())
+    private val _uiState = MutableStateFlow(initialState)
     val uiState: StateFlow<CallAiUiState> = _uiState.asStateFlow()
 
     private var nextContactId = 2L
+    private var activePrompt = ""
+    private var refinementResult: AgentResultDto? = null
+
+    fun startManualCall(scheduledTime: String = "") {
+        refinementResult = null
+        if (uiState.value.isProcessing || uiState.value.isRecording) return
+        activePrompt = "Schedule a call with the details I provide."
+        _uiState.update { it.copy(prompt = "", confirmationDraft = null,
+            conversation = it.conversation + ChatEntry(text = "I'd like to schedule a call.", fromUser = true),
+            missingFieldsDraft = MissingFieldsDraft(
+                listOf("contact_name", "contact_number", "message", "scheduled_time"), "", "", "", scheduledTime),
+            errorMessage = null, infoMessage = null) }
+    }
+
+    fun newConversation() {
+        refinementResult = null
+        if (uiState.value.isProcessing || uiState.value.isRecording) return
+        activePrompt = ""
+        _uiState.update { it.copy(prompt = "", conversation = emptyList(),
+            conversationId = it.conversationId + 1, missingFieldsDraft = null,
+            confirmationDraft = null, errorMessage = null, infoMessage = null,
+            selectedTab = AppTab.Home, showSettings = false) }
+    }
+
+    fun beginNewRequest() {
+        _uiState.update { it.copy(conversation = emptyList(), missingFieldsDraft = null,
+            confirmationDraft = null, errorMessage = null, infoMessage = null) }
+    }
+
+    fun editConfirmation() {
+        if (uiState.value.isProcessing) return
+        _uiState.update { state ->
+            val draft = state.confirmationDraft ?: return@update state
+            state.copy(confirmationDraft = null, missingFieldsDraft = MissingFieldsDraft(
+                fields = listOf("contact_name", "contact_number", "message", "scheduled_time"),
+                contactName = draft.contactName, contactNumber = draft.contactNumber,
+                message = draft.agentResult?.message.orEmpty(), scheduledTime = draft.scheduledTime.orEmpty(),
+            ))
+        }
+    }
 
     init {
         refreshCalls()
@@ -229,10 +281,24 @@ class CallAiViewModel(
 
     fun submitPrompt() {
         val state = uiState.value
-        if (state.prompt.isBlank()) {
+        if (state.isProcessing || state.isRecording) return
+        val isNewPrompt = state.prompt.isNotBlank()
+        if (!isNewPrompt && activePrompt.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Enter a prompt first.") }
             return
         }
+
+        if (isNewPrompt) {
+            activePrompt = if (state.missingFieldsDraft != null && activePrompt.isNotBlank())
+                "$activePrompt ${state.prompt.trim()}" else state.prompt.trim()
+            refinementResult = null
+        }
+        val request = buildScheduleRequest(confirmed = false, includeRefinements = !isNewPrompt).let {
+            if (isNewPrompt) it.copy(chosenTime = null, confirmedNumber = null,
+                confirmedContactName = null, confirmedMessage = null) else it
+        }
+        _uiState.update { it.copy(prompt = "", missingFieldsDraft = if (isNewPrompt) null else it.missingFieldsDraft,
+            conversation = if (isNewPrompt) it.conversation + ChatEntry(text = activePrompt, fromUser = true) else it.conversation) }
 
         viewModelScope.launch {
             _uiState.update {
@@ -248,7 +314,7 @@ class CallAiViewModel(
             runCatching {
                 val response = repository.scheduleCall(
                     baseUrl = state.backendBaseUrl.trim(),
-                    request = buildScheduleRequest(confirmed = false),
+                    request = request,
                 )
                 handleScheduleResponse(response)
             }.onFailure { error ->
@@ -265,6 +331,7 @@ class CallAiViewModel(
 
     fun confirmSchedule() {
         val state = uiState.value
+        if (state.isProcessing || state.isRecording) return
         if (state.confirmationDraft?.agentResult == null) {
             _uiState.update { it.copy(errorMessage = "Nothing is ready to confirm yet.") }
             return
@@ -286,6 +353,11 @@ class CallAiViewModel(
                     request = buildScheduleRequest(
                         confirmed = true,
                         agentResultOverride = state.confirmationDraft.agentResult,
+                    ).copy(
+                        chosenTime = state.confirmationDraft.scheduledTime,
+                        confirmedNumber = state.confirmationDraft.contactNumber,
+                        confirmedContactName = state.confirmationDraft.contactName,
+                        audioPreviewId = state.confirmationDraft.audioPreviewId,
                     ),
                 )
                 handleScheduleResponse(response)
@@ -301,13 +373,29 @@ class CallAiViewModel(
         }
     }
 
-    fun transcribeAudio(file: File) {
+    fun previewAudio() {
+        val state = uiState.value
+        val draft = state.confirmationDraft ?: return
+        if (state.isProcessing || draft.audioPreviewUrl != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isProcessing = true, errorMessage = null, processingMessage = "Generating audio preview") }
+            runCatching { repository.previewAudio(state.backendBaseUrl.trim(), draft.messagePreview) }
+                .onSuccess { preview -> _uiState.update { current -> current.copy(isProcessing = false, processingMessage = null,
+                    confirmationDraft = current.confirmationDraft?.copy(audioPreviewId = preview.previewId,
+                        audioPreviewUrl = preview.audioUrl)) } }
+                .onFailure { error -> _uiState.update { it.copy(isProcessing = false, processingMessage = null,
+                    errorMessage = error.asUserMessage()) } }
+        }
+    }
+
+    fun transcribeAudio(file: File, onReady: ((String) -> Unit)? = null) {
         val state = uiState.value
 
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
                     isProcessing = true,
+                    isTranscribing = true,
                     processingMessage = "Transcribing your voice note with Whisper.",
                     isRecording = false,
                     errorMessage = null,
@@ -322,16 +410,22 @@ class CallAiViewModel(
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
+                        isTranscribing = false,
                         processingMessage = null,
                         prompt = mergePromptWithTranscript(it.prompt, transcript),
                         infoMessage = "Voice prompt added.",
                         feedbackJson = repository.toPrettyJson(response),
                     )
                 }
+                if (transcript.isNotBlank()) {
+                    if (onReady != null) onReady(uiState.value.prompt) else submitPrompt()
+                }
+                else showError("I couldn't hear a message. Please record again.")
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
+                        isTranscribing = false,
                         processingMessage = null,
                         errorMessage = error.asUserMessage(),
                     )
@@ -344,12 +438,11 @@ class CallAiViewModel(
 
     fun refreshCalls() {
         val state = uiState.value
-        if (state.userId.isBlank()) {
+        if (state.userId.isBlank() || state.isRefreshingCalls) {
             return
         }
-
+        _uiState.update { it.copy(isRefreshingCalls = true, errorMessage = null) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshingCalls = true, errorMessage = null) }
 
             runCatching {
                 repository.getCalls(
@@ -374,6 +467,14 @@ class CallAiViewModel(
                 }
             }
         }
+    }
+
+    fun campaignScheduled(recipientNames: List<String>) {
+        val recipients = recipientNames.joinToString(", ").ifBlank { "your selected contacts" }
+        _uiState.update { it.copy(prompt = "", confirmationDraft = null, missingFieldsDraft = null,
+            errorMessage = null, infoMessage = "Calls scheduled successfully.",
+            conversation = it.conversation + ChatEntry(text = "Scheduled calls for $recipients.")) }
+        refreshCalls()
     }
 
     fun cancelCall(jobId: String) {
@@ -404,14 +505,15 @@ class CallAiViewModel(
     private fun buildScheduleRequest(
         confirmed: Boolean,
         agentResultOverride: AgentResultDto? = null,
+        includeRefinements: Boolean = true,
     ): ScheduleCallRequestDto {
         val state = uiState.value
-        val missingDraft = state.missingFieldsDraft
+        val missingDraft = state.missingFieldsDraft.takeIf { includeRefinements }
 
         return ScheduleCallRequestDto(
             userId = state.userId.trim(),
             userName = state.userName.trim(),
-            rawPrompt = state.prompt.trim(),
+            rawPrompt = activePrompt.ifBlank { state.prompt.trim() },
             contacts = state.contacts.map {
                 ContactDto(
                     name = it.name.trim(),
@@ -423,7 +525,7 @@ class CallAiViewModel(
             confirmedContactName = missingDraft?.contactName?.takeIf { "contact_name" in (missingDraft.fields) }?.trim()?.ifEmpty { null },
             confirmedMessage = missingDraft?.message?.takeIf { "message" in (missingDraft.fields) }?.trim()?.ifEmpty { null },
             confirmed = confirmed,
-            agentResult = agentResultOverride,
+            agentResult = agentResultOverride ?: refinementResult.takeIf { includeRefinements && missingDraft != null },
         )
     }
 
@@ -433,6 +535,7 @@ class CallAiViewModel(
 
         when (response.status) {
             "needs_info" -> {
+                refinementResult = response.agentResult
                 _uiState.update {
                     it.copy(
                         isProcessing = false,
@@ -479,7 +582,11 @@ class CallAiViewModel(
                         infoMessage = "Call scheduled successfully.",
                         missingFieldsDraft = null,
                         confirmationDraft = null,
-                        selectedTab = AppTab.Scheduled,
+                        conversation = it.conversation + ChatEntry(
+                            text = "Scheduled. I'll call ${response.contactName} at ${formatCallTime(response.callTime ?: response.scheduledTime)}.",
+                            callId = response.jobId,
+                        ),
+                        selectedTab = AppTab.Home,
                         showSettings = false,
                     )
                 }
@@ -504,9 +611,7 @@ class CallAiViewModel(
     }
 
     private fun toUiModel(job: CallJobDto): ScheduledCallUiModel {
-        val dateLabel = runCatching {
-            OffsetDateTime.parse(job.scheduledTime).format(DateTimeFormatter.ofPattern("EEE, d MMM · h:mm a"))
-        }.getOrElse { job.scheduledTime }
+        val dateLabel = formatCallTime(job.scheduledTime)
 
         return ScheduledCallUiModel(
             id = job.id,
@@ -545,7 +650,7 @@ class CallAiViewModel(
         return when (this) {
             is IOException -> "Could not reach the backend. Check the phone or emulator backend URL and make sure Flask is running."
             is IllegalStateException -> message ?: "The backend returned an unexpected response."
-            else -> message ?: "Something went wrong while talking to the backend."
+            else -> "Something went wrong. Please try again."
         }
     }
 }
